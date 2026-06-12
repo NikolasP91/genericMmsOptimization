@@ -24,6 +24,9 @@ By default the runner uses:
 - output: `optimization_output.json`
 - post-solve validation: enabled
 - run artifacts: `runs/latest`
+- plain text run log: `run_log.txt`
+- structured event log: `runs/latest/run_events.jsonl`
+- native HiGHS solver log: `runs/latest/solver_log.txt`
 
 Useful options:
 
@@ -32,11 +35,14 @@ Useful options:
 .\.venv\Scripts\python.exe main.py --time-limit 300
 .\.venv\Scripts\python.exe main.py -o my_result.json
 .\.venv\Scripts\python.exe main.py --artifacts-dir runs/experiment_001
+.\.venv\Scripts\python.exe main.py --log-file runs/experiment_001/run_log.txt
+.\.venv\Scripts\python.exe main.py --solver-log-file runs/experiment_001/solver_log.txt
 ```
 
 Each run writes reproducibility metadata into the output JSON and artifact
 directory, including input hash, git commit, package versions, solver settings,
-model size, objective value, big-M value, and validation results.
+model size, objective value, big-M value, validation results, plain text logs,
+native solver logs, and structured run events.
 
 ## Test
 
@@ -45,8 +51,9 @@ model size, objective value, big-M value, and validation results.
 ```
 
 The tests cover input validation, known-answer validation fixtures, output
-validation failure modes, constraint-section naming, and stable run metadata
-hashing.
+validation failure modes, constraint-section naming, stable run metadata hashing,
+logging utilities, report builders, module boundaries, and a full biomass-case
+optimization regression.
 
 ## Notes
 

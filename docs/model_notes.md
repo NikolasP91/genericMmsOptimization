@@ -5,6 +5,25 @@ dispatch scheduling / unit commitment with thermal units, RES/PV units, reserve
 requirements, operating-state logic, ramping, availability limits, and
 high-penalty relaxation variables.
 
+## Governing Requirement Sources
+
+Future model, input, output, and validation changes should be checked against
+the following local PDF sources before implementation:
+
+- `512811 ΔΙΑΚΗΡΥΞΗ - ΚΗΜΔΗΣ (2) -w_o comments.pdf`
+- `κώδικας-διαχείρισης-μδν-4η-έκδοση-3ος-2022.pdf`
+
+The tender document and the MDN management code are treated as governing
+requirements for the rest of development. When a change touches dispatch
+scheduling rules, reserve sizing/provision, operating states, data interfaces,
+reports, or validation checks, cite or summarize the relevant PDF requirement in
+the associated notes, tests, or commit message.
+
+Accepted near-term additions are tracked in
+`docs/requirements_traceability.md` and `docs/development_roadmap.md`. Real-Time
+Dispatch (RTD) is explicitly excluded from this project and should not be
+implemented.
+
 ## Current Strengths
 
 - MILP structure with binary commitment/state variables and continuous dispatch.
@@ -16,6 +35,38 @@ high-penalty relaxation variables.
 - Automatic post-solve validation through `solution_validation.py`.
 - Reduced binary footprint in the reserve and operating-state transition
   formulation.
+- MMS-style post-solve reports for dispatch instructions, reserve monitoring,
+  and RES/PV curtailment.
+
+## Model Package Layout
+
+The active optimization algebra has been modularized under `mms/model/`:
+
+- `preprocessing.py`: unit filtering, unit category construction, and
+  time-granularity conversion used before model construction.
+- `problem.py`: top-level PuLP problem assembly, objective assembly, MPS export,
+  solver selection, and solve metadata.
+- `core.py`: global decision variables, min/max handling, RES aggregation, load
+  balance, and commitment startup/shutdown consistency.
+- `thermal_constraints.py`: thermal-unit ramping, must-run, forbidden-zone,
+  availability, testing-mode, OOS-mode, and variable-cost-curve constraints.
+- `operating_states.py`: operating-state power levels, allowed transitions, and
+  minimum/maximum state-duration logic.
+- `reserves.py`: primary, secondary, and tertiary active-power reserve algebra.
+- `res_dispatch.py`: RES/PV dispatch, setpoint, grid-capacity, and curtailment
+  variables.
+
+The active workflow is now split across:
+
+- `mms/pipeline.py`: optimization workflow orchestration from prepared input to
+  output JSON payload.
+- `mms/postsolve.py`: solution-variable parsing, setpoint reconstruction,
+  violation summaries, and legacy output JSON assembly.
+- `RV_genericMmsOptimization.py`: compatibility facade for older imports only.
+
+New algebra should be added to the appropriate `mms/model/` module, and new
+post-solve/output behavior should be added under `mms/postsolve.py` or
+`mms/reports.py` rather than re-expanding the compatibility facade.
 
 ## Automatic Validation Checks
 
@@ -120,6 +171,12 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `solve_metadata.json`
 - `validation_report.json`
 - `example_model.mps`
+- `dispatch_instructions.json`
+- `reserve_monitoring_report.json`
+- `res_curtailment_report.json`
+- `run_events.jsonl`
+- `run_log.txt`
+- `solver_log.txt`
 
 These are ignored by git because they are generated per run.
 
@@ -129,24 +186,32 @@ The output JSON includes:
   section statistics, and solve time.
 - `Run_Metadata`: input hash, git commit, git dirty flag, Python version,
   platform, and package versions.
+- `Dispatch_Instructions`, `Reserve_Monitoring_Report`, and
+  `RES_Curtailment_Report`: MMS-style DS evidence derived from the solved
+  schedule. These are also written as separate artifacts under `runs/latest`.
+
+The plain text run log mirrors Python/application console output. The native
+HiGHS solver log is written separately when HiGHS is used. The JSONL event log
+records structured milestones such as run start, validation, optimization
+completion, and artifact writing.
 
 ## Benchmark Fixtures
 
 `benchmarks/known_answer_cases.json` contains small hand-checkable validation
 cases. They are intentionally tiny, so they can run quickly in unit tests and
-catch regressions in the accounting logic before larger optimization cases are
-added.
+catch regressions in the accounting logic.
+
+`tests/test_full_run_regression.py` runs the accepted biomass case through
+`main.py` and checks the known objective value, solver status, validation
+status, model size, and artifact set. This is slower than the small fixtures,
+but it protects the full DS execution path.
 
 ## Research-Grade Improvements Still To Do
 
 - Continue replacing broad big-M constants with constraint-specific tight bounds
   in remaining ramping, reserve-availability, and forbidden-zone constraints.
-- Add full optimization benchmark cases with known optimal schedules and
-  objective values.
-- Continue splitting the monolithic model-building file into separate modules by
-  constraint family. The build is now section-tracked and support code is
-  modularized, but moving the algebra itself should be done incrementally to
-  avoid changing the formulation by accident.
+- Add additional full optimization benchmark cases with known optimal schedules
+  and objective values.
 - Add equation-level documentation for each constraint family.
 - Add deeper tests that compare ramping and operating-state behavior against
   hand-computed expectations.

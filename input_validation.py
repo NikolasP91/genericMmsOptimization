@@ -83,6 +83,12 @@ def validate_input_data(input_data):
     if not _is_number(time_granularity) or time_granularity <= 0:
         errors.append("Time_granularity must be a positive number.")
 
+    run_mode = input_data.get("run_mode", "DS")
+    if run_mode == "RTD":
+        errors.append("run_mode 'RTD' is explicitly out of scope for this project.")
+    elif run_mode not in ("RDAS", "DS"):
+        errors.append("run_mode must be 'RDAS' or 'DS' when provided.")
+
     units = input_data.get("Generating_Units", [])
     if not isinstance(units, list) or not units:
         errors.append("Generating_Units must be a nonempty list.")

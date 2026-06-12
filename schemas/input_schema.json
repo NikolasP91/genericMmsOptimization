@@ -12,6 +12,10 @@
     "Load_forecast"
   ],
   "properties": {
+    "run_mode": {
+      "enum": ["RDAS", "DS"],
+      "description": "Scheduling mode. RTD is intentionally unsupported in this project."
+    },
     "Cost_parameters": { "type": "object" },
     "Other_coefficients": { "type": "object" },
     "constraints": { "type": "object" },

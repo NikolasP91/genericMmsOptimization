@@ -16,7 +16,7 @@ def write_json(path, data):
         json.dump(data, f, indent=2)
 
 
-def write_run_artifacts(artifact_dir, input_data, output_data=None, error_report=None):
+def write_run_artifacts(artifact_dir, input_data, output_data=None, error_report=None, log_file=None):
     if artifact_dir is None:
         return
     write_json(artifact_dir / "input_snapshot.json", input_data)
@@ -28,8 +28,18 @@ def write_run_artifacts(artifact_dir, input_data, output_data=None, error_report
             write_json(artifact_dir / "run_metadata.json", output_data["Run_Metadata"])
         if "Solve_Metadata" in output_data:
             write_json(artifact_dir / "solve_metadata.json", output_data["Solve_Metadata"])
+        if "Dispatch_Instructions" in output_data:
+            write_json(artifact_dir / "dispatch_instructions.json", output_data["Dispatch_Instructions"])
+        if "Reserve_Monitoring_Report" in output_data:
+            write_json(artifact_dir / "reserve_monitoring_report.json", output_data["Reserve_Monitoring_Report"])
+        if "RES_Curtailment_Report" in output_data:
+            write_json(artifact_dir / "res_curtailment_report.json", output_data["RES_Curtailment_Report"])
     if error_report is not None:
         write_json(artifact_dir / "error_report.json", error_report)
+    if log_file:
+        log_path = Path(log_file)
+        if log_path.exists():
+            shutil.copy2(log_path, artifact_dir / log_path.name)
     mps_path = Path("example_model.mps")
     if mps_path.exists():
         shutil.copy2(mps_path, artifact_dir / mps_path.name)

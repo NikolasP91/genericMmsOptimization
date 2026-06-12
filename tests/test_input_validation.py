@@ -34,6 +34,15 @@ class InputValidationTests(unittest.TestCase):
         report = validate_input_data(warned_data)
         self.assertTrue(report["warnings"])
 
+    def test_rtd_run_mode_is_rejected(self):
+        with INPUT_PATH.open(encoding="utf-8") as f:
+            data = json.load(f)
+        rtd_data = copy.deepcopy(data)
+        rtd_data["run_mode"] = "RTD"
+        report = validate_input_data(rtd_data)
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(any("RTD" in error for error in report["errors"]))
+
 
 if __name__ == "__main__":
     unittest.main()

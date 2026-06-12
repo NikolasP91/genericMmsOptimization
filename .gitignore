@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+
+# Generated optimization and solver artifacts
+*.mps
+*.lp
+*.sol
+solver_log.txt
+solution_values*.json
+Final_highsNative_solution_values.json
+optimization_output.json

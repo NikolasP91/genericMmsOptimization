@@ -165,59 +165,40 @@ def create_global_variables(prob, data, intervals):
         prob += 100 * power[i][0] == 100 * gen['current_Power(MW)']  # the energy production of the hour = 0
     return prob, power, state, RES_sum, startup, shutdown
 
-def find_N_1_N_2_thermal_units(prob,  CONV, RES, PV, state, data, M, intervals):
-    N_1 = [[pl.LpVariable(name=f'N_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, gen in enumerate(data)]
-    N_2 = [[pl.LpVariable(name=f'N_2_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, gen in enumerate(data)]
+def create_largest_online_capacity_bounds(prob, CONV, state, data, intervals):
+    largest_online_capacity = [
+        pl.LpVariable(name=f'largest_online_capacity_{t}', lowBound=0, upBound=None)
+        for t in intervals
+    ]
+    largest_two_online_capacity = [
+        pl.LpVariable(name=f'largest_two_online_capacity_{t}', lowBound=0, upBound=None)
+        for t in intervals
+    ]
 
-    y_0 = [pl.LpVariable(name=f'y_0_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals]
-    y_1 = [pl.LpVariable(name=f'y_1_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals]
-    y_2 = [pl.LpVariable(name=f'y_2_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals]
-
-    count_on = [pl.LpVariable(name=f'count_on_{t}', lowBound=0, cat='Integer') for t in intervals]
-    n = len(CONV)
+    prob += largest_online_capacity[0] == 0
+    prob += largest_two_online_capacity[0] == 0
 
     for t in intervals[1:]:
-        #       Find the 1st and 2nd active conventional units with the highest available power
-        # prob += pl.lpSum(N_1[i][t] + s_N_1[i][t] for i in CONV) == 1
-        # prob += pl.lpSum(N_2[i][t] + s_N_2[i][t] for i in CONV) == 1
-
-        prob += count_on[t] == pl.lpSum(state[i][t] for i in CONV)
-
-       #  calculate the values of y binary variables that define how many units are On every dispatch period
-
-        # C1
-        prob += y_0[t] + y_1[t] + y_2[t] == 1
-        # C2
-        prob += y_0[t] >= 1 - count_on[t]
-        # C3
-        prob += n * y_0[t] <= n - count_on[t]
-        # C4
-        prob += n * y_2[t] >= count_on[t] - 1
-        # C5
-        prob += 2 * y_2[t] <= count_on[t]
-
-        # tie y binaries with N_1 & N_2
-        prob += pl.lpSum(N_1[i][t] for i in CONV) == y_1[t] + y_2[t]
-        prob += pl.lpSum(N_2[i][t] for i in CONV) == y_2[t]
-
-        for i in RES + PV:
-            prob += N_1[i][t] == 0
-            prob += N_2[i][t] == 0
+        total_online_capacity = pl.lpSum(
+            data[i]['availability'][t - 1] * state[i][t]
+            for i in CONV
+        )
 
         for i in CONV:
-            prob += N_1[i][t] <= state[i][t]
-            prob += N_2[i][t] <= state[i][t]
-            prob += N_1[i][t] + N_2[i][t] <= 1
+            prob += largest_online_capacity[t] >= data[i]['availability'][t - 1] * state[i][t]
+            prob += largest_two_online_capacity[t] >= data[i]['availability'][t - 1] * state[i][t]
 
+        for left_index, i in enumerate(CONV):
+            for j in CONV[left_index + 1:]:
+                prob += largest_two_online_capacity[t] >= (
+                        data[i]['availability'][t - 1] * state[i][t]
+                        + data[j]['availability'][t - 1] * state[j][t]
+                )
 
-            for j in CONV:
-                if i != j:
-                    # Largest unit comparison using Big-M method
-                    prob += N_1[i][t] * data[i]['availability'][t-1] >= state[j][t] * data[j]['availability'][t-1] - M * (1 - N_1[i][t])
-                    # Second-largest unit comparison using Big-M method
-                    prob += N_2[i][t] * data[i]['availability'][t-1] >= state[j][t] * data[j]['availability'][t-1] - M * (N_1[j][t] + (1 - N_2[i][t]))
-           # objective_terms += s_N_1[i][t] * 10000 + s_N_2[i][t] * 10000
-    return N_1, N_2
+        prob += largest_online_capacity[t] <= total_online_capacity
+        prob += largest_two_online_capacity[t] <= total_online_capacity
+
+    return largest_online_capacity, largest_two_online_capacity
 
 
 def produce_min_max_t(data, intervals):
@@ -334,7 +315,7 @@ def create_production_load_balance_constraint(prob, objective_terms, intervals, 
         objective_terms += s_load_plus[t] * x_load + s_load_minus[t] * x_load
     return prob, objective_terms, s_load_minus, s_load_plus
 
-def create_primary_active_power_reserves_constraint(prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M,  PV, N_1, N_2):
+def create_primary_active_power_reserves_constraint(prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M,  PV, largest_online_capacity, largest_two_online_capacity):
     # epsilon = 0.001
     # M=10000
     # decision variables generation
@@ -345,8 +326,6 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
     primary_APRR = [[pl.LpVariable(name=f'primary_APRR_{t}_{n}', lowBound=0, upBound=None) for n in [0, 1]] for t in intervals]
     s_primary_APR_upwards = [pl.LpVariable(name=f's_primary_APR_upwards_{t}', lowBound=0, upBound=None) for t in intervals]
     s_primary_APR_downwards = [pl.LpVariable(name=f's_primary_APR_downwards_{t}', lowBound=0, upBound=None) for t in intervals]
-
-    binary_primary = [[[pl.LpVariable(name=f'binary_primary_{t}_{n}_{m}', lowBound=0, upBound=1, cat='Binary') for m in range(6)] for n in [0, 1]] for t in intervals]
 
     for i, gen in enumerate(data):
         gen_id = gen['gen_id']
@@ -397,42 +376,21 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
         prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][0][1]/100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][1]
         prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][1][0]/100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][0]
         prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][1][1]/100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][1]
-        prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][2]/100) * pl.lpSum(N_1[i][t] * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2]
-        prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][3]/100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3]
-
-        prob += pl.lpSum(binary_primary[t][0][m] for m in range(6)) == 1
-
-
-        prob += primary_APRR[t][0] <= (input_data["Other_coefficients"]["primary_upwards"][0][0] / 100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][0] + M * (1 - binary_primary[t][0][0])
-        prob += primary_APRR[t][0] <= (input_data["Other_coefficients"]["primary_upwards"][0][1] / 100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][1] + M * (1 - binary_primary[t][0][1])
-        prob += primary_APRR[t][0] <= (input_data["Other_coefficients"]["primary_upwards"][1][0] / 100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][0] + M * (1 - binary_primary[t][0][2])
-        prob += primary_APRR[t][0] <= (input_data["Other_coefficients"]["primary_upwards"][1][1] / 100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][1] + M * (1 - binary_primary[t][0][3])
-        prob += primary_APRR[t][0] <= (input_data["Other_coefficients"]["primary_upwards"][2] / 100) * pl.lpSum(N_1[i][t] * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2] + M * (1 - binary_primary[t][0][4])
-        prob += primary_APRR[t][0] <= (input_data["Other_coefficients"]["primary_upwards"][3] / 100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3] + M * (1 - binary_primary[t][0][5])
-
-
+        prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][2]/100) * largest_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2]
+        prob += primary_APRR[t][0] >= (input_data["Other_coefficients"]["primary_upwards"][3]/100) * largest_two_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3]
 
         prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][0][0]/100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][0]
         prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][0][1]/100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][1]
         prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][1][0]/100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][0]
         prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][1][1]/100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][1]
-        prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][2]/100) * pl.lpSum(N_1[i][t] * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2]
-        prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][3]/100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3]
-
-        prob += pl.lpSum(binary_primary[t][1][m] for m in range(6)) == 1
-
-        prob += primary_APRR[t][1] <= (input_data["Other_coefficients"]["primary_downwards"][0][0] / 100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][0] + M * (1 - binary_primary[t][1][0])
-        prob += primary_APRR[t][1] <= (input_data["Other_coefficients"]["primary_downwards"][0][1] / 100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][1] + M * (1 - binary_primary[t][1][1])
-        prob += primary_APRR[t][1] <= (input_data["Other_coefficients"]["primary_downwards"][1][0] / 100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][0] + M * (1 - binary_primary[t][1][2])
-        prob += primary_APRR[t][1] <= (input_data["Other_coefficients"]["primary_downwards"][1][1] / 100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][1] + M * (1 - binary_primary[t][1][3])
-        prob += primary_APRR[t][1] <= (input_data["Other_coefficients"]["primary_downwards"][2] / 100) * pl.lpSum(N_1[i][t] * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2] + M * (1 - binary_primary[t][1][4])
-        prob += primary_APRR[t][1] <= (input_data["Other_coefficients"]["primary_downwards"][3] / 100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3] + M * (1 - binary_primary[t][1][5])
+        prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][2]/100) * largest_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2]
+        prob += primary_APRR[t][1] >= (input_data["Other_coefficients"]["primary_downwards"][3]/100) * largest_two_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3]
 
         objective_terms += s_primary_APR_upwards[t] * input_data["Cost_parameters"]["x_primary_APR_up"] + s_primary_APR_downwards[t] * input_data["Cost_parameters"]["x_primary_APR_down"]
     return prob, objective_terms, primary_ActPR_plus, primary_ActPR_minus, primary_APRR, s_primary_APR_upwards, s_primary_APR_downwards
 
 
-def create_secondary_active_power_reserves_constraint(prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2):
+def create_secondary_active_power_reserves_constraint(prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity):
     secondary_ActPR_plus = [[pl.LpVariable(name=f'secondary_ActPR_plus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
     secondary_ActPR_minus = [[pl.LpVariable(name=f'secondary_ActPR_minus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
     y_plus = [[pl.LpVariable(name=f'y_plus_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
@@ -440,7 +398,6 @@ def create_secondary_active_power_reserves_constraint(prob, input_data, objectiv
     secondary_APRR = [[pl.LpVariable(name=f'secondary_APRR_{t}_{n}', lowBound=0, upBound=None) for n in [0, 1]] for t in intervals]
     s_secondary_APR_upwards = [pl.LpVariable(name=f's_secondary_APR_upwards_{t}', lowBound=0, upBound=None) for t in intervals]
     s_secondary_APR_downwards = [pl.LpVariable(name=f's_secondary_APR_downwards_{t}', lowBound=0, upBound=None) for t in intervals]
-    binary_secondary = [[[pl.LpVariable(name=f'binary_secondary_{t}_{n}_{m}', lowBound=0, upBound=1, cat='Binary') for m in range(6)] for n in [0, 1]] for t in intervals]
 
     for i, gen in enumerate(data):
         gen_id = gen['gen_id']
@@ -497,45 +454,25 @@ def create_secondary_active_power_reserves_constraint(prob, input_data, objectiv
         prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][0][1]/100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][1]
         prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][1][0]/100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][0]
         prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][1][1]/100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][1]
-        prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][2]/100) * pl.lpSum(N_1[i][t] * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2]
-        prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][3]/100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3]
-
-        prob += pl.lpSum(binary_secondary[t][0][m] for m in range(6)) == 1
-
-        prob += secondary_APRR[t][0] <= (input_data["Other_coefficients"]["secondary_upwards"][0][0] / 100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][0] + M * (1 - binary_secondary[t][0][0])
-        prob += secondary_APRR[t][0] <= (input_data["Other_coefficients"]["secondary_upwards"][0][1] / 100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][1] + M * (1 - binary_secondary[t][0][1])
-        prob += secondary_APRR[t][0] <= (input_data["Other_coefficients"]["secondary_upwards"][1][0] / 100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][0] + M * (1 - binary_secondary[t][0][2])
-        prob += secondary_APRR[t][0] <= (input_data["Other_coefficients"]["secondary_upwards"][1][1] / 100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][1] + M * (1 - binary_secondary[t][0][3])
-        prob += secondary_APRR[t][0] <= (input_data["Other_coefficients"]["secondary_upwards"][2] / 100) * pl.lpSum(N_1[i][t] * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2] + M * (1 - binary_secondary[t][0][4])
-        prob += secondary_APRR[t][0] <= (input_data["Other_coefficients"]["secondary_upwards"][3] / 100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3] + M * (1 - binary_secondary[t][0][5])
-
+        prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][2]/100) * largest_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2]
+        prob += secondary_APRR[t][0] >= (input_data["Other_coefficients"]["secondary_upwards"][3]/100) * largest_two_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3]
 
         prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][0][0]/100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][0]
         prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][0][1]/100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][1]
         prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][1][0]/100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][0]
         prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][1][1]/100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][1]
-        prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][2]/100) * pl.lpSum(N_1[i][t] * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2]
-        prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][3]/100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3]
-
-        prob += pl.lpSum(binary_secondary[t][1][m] for m in range(6)) == 1
-
-        prob += secondary_APRR[t][1] <= (input_data["Other_coefficients"]["secondary_downwards"][0][0] / 100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][0] + M * (1 - binary_secondary[t][1][0])
-        prob += secondary_APRR[t][1] <= (input_data["Other_coefficients"]["secondary_downwards"][0][1] / 100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][1] + M * (1 - binary_secondary[t][1][1])
-        prob += secondary_APRR[t][1] <= (input_data["Other_coefficients"]["secondary_downwards"][1][0] / 100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][0] + M * (1 - binary_secondary[t][1][2])
-        prob += secondary_APRR[t][1] <= (input_data["Other_coefficients"]["secondary_downwards"][1][1] / 100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][1] + M * (1 - binary_secondary[t][1][3])
-        prob += secondary_APRR[t][1] <= (input_data["Other_coefficients"]["secondary_downwards"][2] / 100) * pl.lpSum(N_1[i][t] * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2] + M * (1 - binary_secondary[t][1][4])
-        prob += secondary_APRR[t][1] <= (input_data["Other_coefficients"]["secondary_downwards"][3] / 100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3] + M * (1 - binary_secondary[t][1][5])
-
+        prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][2]/100) * largest_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2]
+        prob += secondary_APRR[t][1] >= (input_data["Other_coefficients"]["secondary_downwards"][3]/100) * largest_two_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3]
 
         # objective_terms += (secondary_APRR[t][0] + secondary_APRR[t][1]) * 100
 
         # prob += secondary_APRR[t][0] == 0.1 * RES_sum[t] + 0.04 * pl.lpSum(power[i][t] for i in range(len(data)))  # Load_forecast[t]
         # prob += secondary_APRR[t][1] == 0.1 * RES_sum[t] + 0.04 * pl.lpSum(power[i][t] for i in range(len(data)))  # Load_forecast[t]
-        objective_terms += s_secondary_APR_upwards[t] * input_data["Cost_parameters"]["x_secondary_APR_up"] + s_secondary_APR_downwards[t] * input_data["Cost_parameters"]["x_secondary_APR_up"]
+        objective_terms += s_secondary_APR_upwards[t] * input_data["Cost_parameters"]["x_secondary_APR_up"] + s_secondary_APR_downwards[t] * input_data["Cost_parameters"]["x_secondary_APR_down"]
     return prob, objective_terms, y_plus, y_minus, secondary_ActPR_plus, secondary_ActPR_minus, secondary_APRR, s_secondary_APR_upwards, s_secondary_APR_downwards
 
 
-def create_tertiary_active_power_reserves_constraint(prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2):
+def create_tertiary_active_power_reserves_constraint(prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity):
     tertiary_ActPR_plus = [
         [pl.LpVariable(name=f'tertiary_ActPR_plus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen
         in
@@ -550,7 +487,6 @@ def create_tertiary_active_power_reserves_constraint(prob, input_data, objective
                      intervals]
     s_tertiary_APR_upwards = [pl.LpVariable(name=f's_tertiary_APR_upwards_{t}', lowBound=0, upBound=None) for t in intervals]
     s_tertiary_APR_downwards = [pl.LpVariable(name=f's_tertiary_APR_downwards_{t}', lowBound=0, upBound=None) for t in intervals]
-    binary_tertiary = [[[pl.LpVariable(name=f'binary_tertiary_{t}_{n}_{m}', lowBound=0, upBound=1, cat='Binary') for m in range(6)]for n in [0, 1]] for t in intervals]
 
     for i, gen in enumerate(data):
         gen_id = gen['gen_id']
@@ -610,36 +546,15 @@ def create_tertiary_active_power_reserves_constraint(prob, input_data, objective
         prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][0][1]/100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][1]
         prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][1][0]/100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][0]
         prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][1][1]/100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][1]
-        prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][2]/100) * pl.lpSum(N_1[i][t] * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2]
-        prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][3]/100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3]
-
-        prob += pl.lpSum(binary_tertiary[t][0][m] for m in range(6)) == 1
-
-        prob += tertiary_APRR[t][0] <= (input_data["Other_coefficients"]["tertiary_upwards"][0][0] / 100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][0] + M * (1 - binary_tertiary[t][0][0])
-        prob += tertiary_APRR[t][0] <= (input_data["Other_coefficients"]["tertiary_upwards"][0][1] / 100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][0][1] + M * (1 - binary_tertiary[t][0][1])
-        prob += tertiary_APRR[t][0] <= (input_data["Other_coefficients"]["tertiary_upwards"][1][0] / 100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][0] + M * (1 - binary_tertiary[t][0][2])
-        prob += tertiary_APRR[t][0] <= (input_data["Other_coefficients"]["tertiary_upwards"][1][1] / 100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][1][1] + M * (1 - binary_tertiary[t][0][3])
-        prob += tertiary_APRR[t][0] <= (input_data["Other_coefficients"]["tertiary_upwards"][2] / 100) * pl.lpSum(N_1[i][t] * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2] + M * (1 - binary_tertiary[t][0][4])
-        prob += tertiary_APRR[t][0] <= (input_data["Other_coefficients"]["tertiary_upwards"][3] / 100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3] + M * (1 - binary_tertiary[t][0][5])
-
+        prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][2]/100) * largest_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][2]
+        prob += tertiary_APRR[t][0] >= (input_data["Other_coefficients"]["tertiary_upwards"][3]/100) * largest_two_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_upwards"][3]
 
         prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][0][0]/100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][0]
         prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][0][1]/100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][1]
         prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][1][0]/100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][0]
         prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][1][1]/100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][1]
-        prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][2]/100) * pl.lpSum(N_1[i][t] * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2]
-        prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][3]/100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t-1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3]
-
-        prob += pl.lpSum(binary_tertiary[t][1][m] for m in range(6)) == 1
-
-        prob += tertiary_APRR[t][1] <= (input_data["Other_coefficients"]["tertiary_downwards"][0][0] / 100) * pl.lpSum(power[i][t] for i in range(len(data))) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][0] + M * (1 - binary_tertiary[t][1][0])
-        prob += tertiary_APRR[t][1] <= (input_data["Other_coefficients"]["tertiary_downwards"][0][1] / 100) * (pl.lpSum(power[i][t] for i in range(len(data))) - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][0][1] + M * (1 - binary_tertiary[t][1][1])
-        prob += tertiary_APRR[t][1] <= (input_data["Other_coefficients"]["tertiary_downwards"][1][0] / 100) * RES_sum[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][0] + M * (1 - binary_tertiary[t][1][2])
-        prob += tertiary_APRR[t][1] <= (input_data["Other_coefficients"]["tertiary_downwards"][1][1] / 100) * (RES_sum[t] - pl.lpSum(power[i][t] for i in PV)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][1][1] + M * (1 - binary_tertiary[t][1][3])
-        prob += tertiary_APRR[t][1] <= (input_data["Other_coefficients"]["tertiary_downwards"][2] / 100) * pl.lpSum(N_1[i][t] * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2] + M * (1 - binary_tertiary[t][1][4])
-        prob += tertiary_APRR[t][1] <= (input_data["Other_coefficients"]["tertiary_downwards"][3] / 100) * pl.lpSum((N_1[i][t] + N_2[i][t]) * gen['availability'][t - 1] for i, gen in enumerate(data)) * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3] + M * (1 - binary_tertiary[t][1][5])
-
-
+        prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][2]/100) * largest_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][2]
+        prob += tertiary_APRR[t][1] >= (input_data["Other_coefficients"]["tertiary_downwards"][3]/100) * largest_two_online_capacity[t] * input_data["constraints"]["APRR_calculations"]["calculation-method_downwards"][3]
 
         # objective_terms += (tertiary_APRR[t][0] + tertiary_APRR[t][1]) * 100
         objective_terms += s_tertiary_APR_upwards[t] * input_data["Cost_parameters"]["x_tertiary_APR_up"] + s_tertiary_APR_downwards[t] * input_data["Cost_parameters"]["x_tertiary_APR_down"]
@@ -758,47 +673,38 @@ def create_operating_states_power_levels_constraints(input_data, prob, objective
 
 
 def create_allowed_operating_states_transition_constraints(prob, obj, data, intervals, u_2_dict, M):
-    import copy
-    transition_cost = {}
-    y_dict = {}
-    transition_data = []
+    transition_arc = {}
     for gen in data:
         gen_id = gen['gen_id']
-        for t in intervals:
-            key = (gen_id, t)
-            # Define the LpVariable and assign it to the key in the dictionary
-            transition_cost[key] = pl.LpVariable(name=f'transition_cost_{key[0] + 1}_{key[1]}', lowBound=0, upBound=None)
-            # Now transition_cost contains all our variables, accessible by the unique tuple keys
-            for allowed_transition in gen['operating-state-transitions']:
-                from_oper_state_id = allowed_transition['from']
-                key2 = (gen_id, t, from_oper_state_id)
-                y_dict[key2] = pl.LpVariable(name=f'y_dict_{key2[0] + 1}_{key2[1]}_{key2[2]}', lowBound=0, upBound=None)
-    for gen in data:
-        gen_id = gen['gen_id']
-        # print('')
-        # print('gen_id: ', gen_id)
-        # for t in intervals[1:]:
-        #     print('gen_id: ', gen_id)
         for allowed_transition in gen['operating-state-transitions']:
             from_oper_state_id = allowed_transition['from']
-            to_oper_states = copy.deepcopy(allowed_transition['transitions'])  # all allowed states to transition to
-            to_oper_states.append({'id': from_oper_state_id})  # also we can stay in the current state
-            # transition_data.append([from_oper_state_id, to_oper_states])
-            # print(transition_data)
-            # print('from: ', from_oper_state_id, 'to: ', to_oper_states)
+            to_oper_states = {
+                to_oper_state_data['id']: to_oper_state_data.get('transition-cost', 0)
+                for to_oper_state_data in allowed_transition['transitions']
+            }
+            to_oper_states.setdefault(from_oper_state_id, 0)
             for t in intervals[1:]:
-                prob += pl.lpSum(u_2_dict[(gen_id, t, to_oper_state_data['id'])] for to_oper_state_data in to_oper_states) >= u_2_dict[(gen_id, t - 1, from_oper_state_id)]
-                # the generator can remain in the same operating state, and can also change state as the json file defines ("operating-state-transitions")
-                # Conditional constraints using big-M
-                prob += y_dict[(gen_id, t, from_oper_state_id)] <= pl.lpSum(u_2_dict[(gen_id, t, to_oper_state_data['id'])] * to_oper_state_data.get('transition-cost', 0) for to_oper_state_data in to_oper_states) + M * (1 - u_2_dict[(gen_id, t-1, from_oper_state_id)])  # a = Sum if y = 1
-                prob += y_dict[(gen_id, t, from_oper_state_id)] >= pl.lpSum(u_2_dict[(gen_id, t, to_oper_state_data['id'])] * to_oper_state_data.get('transition-cost', 0) for to_oper_state_data in to_oper_states) - M * (1 - u_2_dict[(gen_id, t-1, from_oper_state_id)])  # a = Sum if y = 1
-                prob += y_dict[(gen_id, t, from_oper_state_id)] <= 0 + M * u_2_dict[(gen_id, t-1, from_oper_state_id)]  # a = 0 if y = 0
-                prob += y_dict[(gen_id, t, from_oper_state_id)] >= 0 - M * u_2_dict[(gen_id, t-1, from_oper_state_id)]  # a = 0 if y = 0
+                arcs_from_state = []
+                for to_oper_state_id, transition_cost in to_oper_states.items():
+                    key = (gen_id, t, from_oper_state_id, to_oper_state_id)
+                    transition_arc[key] = pl.LpVariable(
+                        name=f'transition_arc_{gen_id + 1}_{t}_{from_oper_state_id}_{to_oper_state_id}',
+                        lowBound=0,
+                        upBound=1,
+                    )
+                    arcs_from_state.append(transition_arc[key])
+                    prob += transition_arc[key] <= u_2_dict[(gen_id, t - 1, from_oper_state_id)]
+                    prob += transition_arc[key] <= u_2_dict[(gen_id, t, to_oper_state_id)]
+                    prob += transition_arc[key] >= (
+                            u_2_dict[(gen_id, t - 1, from_oper_state_id)]
+                            + u_2_dict[(gen_id, t, to_oper_state_id)]
+                            - 1
+                    )
+                    obj += transition_cost * transition_arc[key]
 
-            #  to_oper_states.clear()
-            #  at t-1 we were ate state -- from, at t we are at state -- to
-    # print(transition_data)
-    obj += pl.lpSum(y_dict[(gen['gen_id'], t, allowed_transition['from'])] for gen in data for allowed_transition in gen['operating-state-transitions'] for t in intervals[1:])
+                # If the unit was in this state at t-1, exactly one allowed/stay
+                # transition must be selected at t.
+                prob += pl.lpSum(arcs_from_state) == u_2_dict[(gen_id, t - 1, from_oper_state_id)]
 
     # print(data)
     return prob, obj
@@ -2000,19 +1906,19 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     #     prob, objective_terms, s_load_minus, s_load_plus = create_production_load_Energy_balance_constraint(prob, objective_terms, intervals, Load_forecast, power, data, CONV, x_load)
     if input_data["constraints"]["primary_active_power_reserves_constraint"] or input_data["constraints"]["secondary_active_power_reserves_constraint"] or input_data["constraints"]["tertiary_active_power_reserves_constraint"]:
         with build_tracker.section("largest_online_units"):
-            N_1, N_2 = find_N_1_N_2_thermal_units(prob, CONV, RES, PV, state, data, M, intervals)
+            largest_online_capacity, largest_two_online_capacity = create_largest_online_capacity_bounds(prob, CONV, state, data, intervals)
     if input_data["constraints"]["primary_active_power_reserves_constraint"]:
         with build_tracker.section("primary_active_power_reserves"):
             prob, objective_terms, primary_ActPR_plus, primary_ActPR_minus, primary_APRR, s_primary_APR_upwards, s_primary_APR_downwards = create_primary_active_power_reserves_constraint(
-                prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
+                prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity)
     if input_data["constraints"]["secondary_active_power_reserves_constraint"]:
         with build_tracker.section("secondary_active_power_reserves"):
             prob, objective_terms, y_plus, y_minus, secondary_ActPR_plus, secondary_ActPR_minus, secondary_APRR, s_secondary_APR_upwards, s_secondary_APR_downwards = create_secondary_active_power_reserves_constraint(
-                prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
+                prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity)
     if input_data["constraints"]["tertiary_active_power_reserves_constraint"]:
         with build_tracker.section("tertiary_active_power_reserves"):
             prob, objective_terms, tertiary_ActPR_plus, tertiary_ActPR_minus, tertiary_APRR, s_tertiary_APR_upwards, s_tertiary_APR_downwards = create_tertiary_active_power_reserves_constraint(
-                prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
+                prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity)
     if input_data["constraints"]["forbidden_zones_constraint"]:
         with build_tracker.section("forbidden_zones"):
             prob, objective_terms, y_zone, s_forbidden_zones_plus, s_forbidden_zones_minus = create_forbidden_zones_constraint(prob, objective_terms, input_data, power, data, intervals, CONV, M)

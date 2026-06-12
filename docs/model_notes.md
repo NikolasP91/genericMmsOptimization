@@ -14,6 +14,8 @@ high-penalty relaxation variables.
   without a useful solution trace.
 - Native HiGHS solver support through PuLP/highspy.
 - Automatic post-solve validation through `solution_validation.py`.
+- Reduced binary footprint in the reserve and operating-state transition
+  formulation.
 
 ## Automatic Validation Checks
 
@@ -88,6 +90,26 @@ metadata also records the number of constraints and variables added by each
 section. This improves MPS inspection and makes solver diagnostics less opaque
 than default `_C1234` names.
 
+## Formulation Tightening
+
+The operating-state transition cost formulation now uses explicit transition arc
+variables instead of big-M indicator-cost constraints. Each arc is tied to the
+previous and current operating-state binaries and carries its own transition
+cost in the objective. This is closer to a standard network-flow-style unit
+commitment transition formulation and removes a source of weak big-M relaxation.
+
+Reserve requirement maxima are represented as lower envelopes: the APRR variable
+is constrained to be at least every active reserve-sizing expression. Because
+APRR is linked by equality to reserve provision plus shortage slack, and both
+provision and slack are costed, the optimizer drives APRR to the active maximum
+without extra max-selection binaries.
+
+The largest-online-unit and largest-two-online-units terms used in reserve
+sizing are now modeled with continuous capacity envelope variables rather than
+the former `N_1` / `N_2` binary selector formulation. This removes selector
+binaries and big-M comparison constraints while preserving the reserve-sizing
+quantities needed by the current deterministic case.
+
 ## Reproducibility Artifacts
 
 By default, `main.py` writes run artifacts to `runs/latest`:
@@ -117,7 +139,8 @@ added.
 
 ## Research-Grade Improvements Still To Do
 
-- Replace broad big-M constants with constraint-specific tight bounds.
+- Continue replacing broad big-M constants with constraint-specific tight bounds
+  in remaining ramping, reserve-availability, and forbidden-zone constraints.
 - Add full optimization benchmark cases with known optimal schedules and
   objective values.
 - Continue splitting the monolithic model-building file into separate modules by

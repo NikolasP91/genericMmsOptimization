@@ -13,6 +13,7 @@ from highspy import HighsSolution
 
 
 from pulp.apis.highs_api import HiGHS_CMD
+from mip_utils import ConstraintBuildTracker, estimate_big_m, name_auto_constraints
 # def read_sol_file(file_path):
 #     with open(file_path, 'r') as file:
 #         lines = file.readlines()
@@ -441,7 +442,6 @@ def create_secondary_active_power_reserves_constraint(prob, input_data, objectiv
     s_secondary_APR_downwards = [pl.LpVariable(name=f's_secondary_APR_downwards_{t}', lowBound=0, upBound=None) for t in intervals]
     binary_secondary = [[[pl.LpVariable(name=f'binary_secondary_{t}_{n}_{m}', lowBound=0, upBound=1, cat='Binary') for m in range(6)] for n in [0, 1]] for t in intervals]
 
-    M = 10000
     for i, gen in enumerate(data):
         gen_id = gen['gen_id']
         for operating_state in gen['operating-states']:
@@ -1814,8 +1814,12 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
                              solver_name="highs", gapRel=None, gapAbs=None, threads=None,
                              solver_options=None, require_optimal=True):
 
-    # Define a large number for the 'big M' method
-    M = 10000
+    big_m_setting = input_data.get("optimization_parameters", {}).get("big_m", "auto")
+    if big_m_setting == "auto":
+        M = estimate_big_m(input_data, data, intervals)
+    else:
+        M = float(big_m_setting)
+    print(f"Using big-M value: {M:g}")
     start_time = time.time()
     # Define the problem
     prob = pl.LpProblem(name="Rdas_DispatchScheduling", sense=pl.LpMinimize)
@@ -1823,12 +1827,17 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     IntervalCount = len(intervals)
 
     # Define constraints
+    build_tracker = ConstraintBuildTracker(prob)
     objective_terms = 0
-    prob, power, state, RES_sum, startup, shutdown = create_global_variables(prob, data, intervals)
-    prob = create_res_sum_calculation_constraint(prob, power, intervals, RES_sum, RES, PV, Partially_Controllable)
-    prob = create_ensure_variables_correctness_constraint(prob, data, intervals, state, startup, shutdown)
-    prob, objective_terms, u_1 = create_variable_cost_curve_calculation_constraints(input_data, prob, objective_terms, power,
-                                                                                         data, intervals, M, state, CONV)
+    with build_tracker.section("initial_conditions"):
+        prob, power, state, RES_sum, startup, shutdown = create_global_variables(prob, data, intervals)
+    with build_tracker.section("res_sum_definition"):
+        prob = create_res_sum_calculation_constraint(prob, power, intervals, RES_sum, RES, PV, Partially_Controllable)
+    with build_tracker.section("commitment_transition_logic"):
+        prob = create_ensure_variables_correctness_constraint(prob, data, intervals, state, startup, shutdown)
+    with build_tracker.section("variable_cost_curve"):
+        prob, objective_terms, u_1 = create_variable_cost_curve_calculation_constraints(input_data, prob, objective_terms, power,
+                                                                                             data, intervals, M, state, CONV)
     # prob, objective_terms, z_3 = create_thermal_state_startup_cost_variable_constraint(prob, objective_terms, data, intervals, u_2, startup) # u_2 --> u_2_dict & z_3 --> z_3_dict done
 
     #
@@ -1842,13 +1851,15 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
 
     data = produce_min_max_t(data, intervals)
 
-    for gen in data:
-        gen_id = gen['gen_id']
-        for t in intervals[1:]:
-            prob += power[gen_id][t] <= gen['max_power(MW)'][t-1]
+    with build_tracker.section("unit_max_power_limits"):
+        for gen in data:
+            gen_id = gen['gen_id']
+            for t in intervals[1:]:
+                prob += power[gen_id][t] <= gen['max_power(MW)'][t-1]
 
 
-    prob, data, on_AGC = min_max_handling(prob, data, input_data, CONV, Partially_Controllable, on_AGC, intervals, u_1, state, power)
+    with build_tracker.section("min_max_handling"):
+        prob, data, on_AGC = min_max_handling(prob, data, input_data, CONV, Partially_Controllable, on_AGC, intervals, u_1, state, power)
     # if input_data["constraints"]["min_max_constraint"]:
     #     # only for dispatchable units check 5.2.4.4 Constraints paragraph in "Διακήρυξη" pdf
     #     for gen in data:
@@ -1938,22 +1949,25 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
 
 
 # constraints for PV & RES apart from setpoints' constraints
-    s_power_plus = [[pl.LpVariable(name=f's_power_plus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
-    s_power_minus = [[pl.LpVariable(name=f's_power_minus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
-    for t in intervals[1:]:
-        for i in RES_no_SP + PV_no_SP:
-            prob += 100 * (power[i][t] - s_power_minus[i][t] + s_power_plus[i][t]) == 100 * RES_forecast[t - 1][i]
-        for i in RES_SP + PV_SP:
-            prob += power[i][t] - s_power_minus[i][t] <= RES_forecast[t - 1][i]
-        for i in RES+PV:
-            objective_terms += s_power_plus[i][t] * input_data["Cost_parameters"]["x_RES_PV_power_plus"] + s_power_minus[i][t] * input_data["Cost_parameters"]["x_RES_PV_power_minus"]
+    with build_tracker.section("res_pv_forecast_tracking"):
+        s_power_plus = [[pl.LpVariable(name=f's_power_plus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
+        s_power_minus = [[pl.LpVariable(name=f's_power_minus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
+        for t in intervals[1:]:
+            for i in RES_no_SP + PV_no_SP:
+                prob += 100 * (power[i][t] - s_power_minus[i][t] + s_power_plus[i][t]) == 100 * RES_forecast[t - 1][i]
+            for i in RES_SP + PV_SP:
+                prob += power[i][t] - s_power_minus[i][t] <= RES_forecast[t - 1][i]
+            for i in RES+PV:
+                objective_terms += s_power_plus[i][t] * input_data["Cost_parameters"]["x_RES_PV_power_plus"] + s_power_minus[i][t] * input_data["Cost_parameters"]["x_RES_PV_power_minus"]
     #
 
         # objective_terms += s_min_a_left[gen_id][t] * 100000
     # print('data:', data)
-    prob, objective_terms, u_2_dict, shutdown_states = create_operating_states_power_levels_constraints(input_data, prob, objective_terms, power, state, data, intervals, CONV, RES, PV, M)  # u_2 --> u_2_dict done
+    with build_tracker.section("operating_state_power_levels"):
+        prob, objective_terms, u_2_dict, shutdown_states = create_operating_states_power_levels_constraints(input_data, prob, objective_terms, power, state, data, intervals, CONV, RES, PV, M)  # u_2 --> u_2_dict done
     # if input_data["constraints"]["availability_constraint"]:
-    prob, objective_terms = create_availability_program(prob, objective_terms, input_data, data, power, intervals, CONV)
+    with build_tracker.section("availability_program"):
+        prob, objective_terms = create_availability_program(prob, objective_terms, input_data, data, power, intervals, CONV)
     print('')
     # print(data)
     print('')
@@ -1961,61 +1975,78 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     # if input_data["constraints"]["gen_declaration_constraint"]:
     #     prob = create_generation_declaration(prob, data, power, intervals)
     if input_data["constraints"]["ramp_up_down_constraints"]:
-        prob, ramp_relax, objective_terms = create_ramp_up_down_constraints(input_data, prob, power, data, intervals, objective_terms)
+        with build_tracker.section("ramp_up_down"):
+            prob, ramp_relax, objective_terms = create_ramp_up_down_constraints(input_data, prob, power, data, intervals, objective_terms)
     if input_data["constraints"]["allowed_thermal_states_transition_constraints"]:
-        prob, objective_terms = create_allowed_operating_states_transition_constraints(prob, objective_terms, data, intervals, u_2_dict, M) # u_2 --> u_2_dict done
+        with build_tracker.section("allowed_operating_state_transitions"):
+            prob, objective_terms = create_allowed_operating_states_transition_constraints(prob, objective_terms, data, intervals, u_2_dict, M) # u_2 --> u_2_dict done
     # if input_data["constraints"]["operating_states_min_time_constraint"]:
     #     prob = create_operating_state_min_time_constraints(prob, data, u_2_dict, IntervalCount, intervals) # u_2 --> u_2_dict
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_a"]:
-        prob, objective_terms = create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals)
+        with build_tracker.section("min_transition_time_between_states_a"):
+            prob, objective_terms = create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals)
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_b"]:
-        prob,  objective_terms = create_min_transition_time_between_states_constraints_b(prob,  objective_terms, input_data, data, u_2_dict, intervals)
+        with build_tracker.section("min_transition_time_between_states_b"):
+            prob,  objective_terms = create_min_transition_time_between_states_constraints_b(prob,  objective_terms, input_data, data, u_2_dict, intervals)
     # if input_data["constraints"]["rdas_deviations_calculation_constraints"] and power_baseline is not None and state_baseline is not None:
     #     prob, objective_terms, deviation_1, deviation_2, y_4, y_5 = create_power_state_baseline_deviations_calculation_constraints(input_data, prob, objective_terms, data, intervals, power,
     #         state, power_baseline, state_baseline, CONV, M)
     # if input_data["constraints"]["power_deviation_penalty"]:
     #     prob, objective_terms, deviation_3, y_6 = create_power_deviation_penalty(input_data, prob, objective_terms, power, intervals, CONV, M, data)
     if input_data["constraints"]["load_production_balance_constraint"]:
-        prob, objective_terms, s_load_minus, s_load_plus = create_production_load_balance_constraint(prob, objective_terms, intervals, Load_forecast, power, data, CONV, x_load)
+        with build_tracker.section("load_balance"):
+            prob, objective_terms, s_load_minus, s_load_plus = create_production_load_balance_constraint(prob, objective_terms, intervals, Load_forecast, power, data, CONV, x_load)
     # if input_data["constraints"]["load_production_Energy_balance_constraint"]:
     #     prob, objective_terms, s_load_minus, s_load_plus = create_production_load_Energy_balance_constraint(prob, objective_terms, intervals, Load_forecast, power, data, CONV, x_load)
     if input_data["constraints"]["primary_active_power_reserves_constraint"] or input_data["constraints"]["secondary_active_power_reserves_constraint"] or input_data["constraints"]["tertiary_active_power_reserves_constraint"]:
-        N_1, N_2 = find_N_1_N_2_thermal_units(prob, CONV, RES, PV, state, data, M, intervals)
+        with build_tracker.section("largest_online_units"):
+            N_1, N_2 = find_N_1_N_2_thermal_units(prob, CONV, RES, PV, state, data, M, intervals)
     if input_data["constraints"]["primary_active_power_reserves_constraint"]:
-        prob, objective_terms, primary_ActPR_plus, primary_ActPR_minus, primary_APRR, s_primary_APR_upwards, s_primary_APR_downwards = create_primary_active_power_reserves_constraint(
-            prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
+        with build_tracker.section("primary_active_power_reserves"):
+            prob, objective_terms, primary_ActPR_plus, primary_ActPR_minus, primary_APRR, s_primary_APR_upwards, s_primary_APR_downwards = create_primary_active_power_reserves_constraint(
+                prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
     if input_data["constraints"]["secondary_active_power_reserves_constraint"]:
-        prob, objective_terms, y_plus, y_minus, secondary_ActPR_plus, secondary_ActPR_minus, secondary_APRR, s_secondary_APR_upwards, s_secondary_APR_downwards = create_secondary_active_power_reserves_constraint(
-            prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
+        with build_tracker.section("secondary_active_power_reserves"):
+            prob, objective_terms, y_plus, y_minus, secondary_ActPR_plus, secondary_ActPR_minus, secondary_APRR, s_secondary_APR_upwards, s_secondary_APR_downwards = create_secondary_active_power_reserves_constraint(
+                prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
     if input_data["constraints"]["tertiary_active_power_reserves_constraint"]:
-        prob, objective_terms, tertiary_ActPR_plus, tertiary_ActPR_minus, tertiary_APRR, s_tertiary_APR_upwards, s_tertiary_APR_downwards = create_tertiary_active_power_reserves_constraint(
-            prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
+        with build_tracker.section("tertiary_active_power_reserves"):
+            prob, objective_terms, tertiary_ActPR_plus, tertiary_ActPR_minus, tertiary_APRR, s_tertiary_APR_upwards, s_tertiary_APR_downwards = create_tertiary_active_power_reserves_constraint(
+                prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, N_1, N_2)
     if input_data["constraints"]["forbidden_zones_constraint"]:
-        prob, objective_terms, y_zone, s_forbidden_zones_plus, s_forbidden_zones_minus = create_forbidden_zones_constraint(prob, objective_terms, input_data, power, data, intervals, CONV, M)
+        with build_tracker.section("forbidden_zones"):
+            prob, objective_terms, y_zone, s_forbidden_zones_plus, s_forbidden_zones_minus = create_forbidden_zones_constraint(prob, objective_terms, input_data, power, data, intervals, CONV, M)
     if input_data["constraints"]["must_run_units_constraint"]:
-        prob, objective_terms, s_must_run = create_mustRun_constraints(prob, objective_terms, input_data, data, intervals, state)
+        with build_tracker.section("must_run_units"):
+            prob, objective_terms, s_must_run = create_mustRun_constraints(prob, objective_terms, input_data, data, intervals, state)
     if input_data["constraints"]["res_pv_dispatch_variables_constraints"]:
-        prob, objective_terms, setpoint, Min_grid_capacity_1, Min_grid_capacity_2, Min_Power_Calc, m, rel_var, g1, g2, g3, g4, Grid_Capacity1, Grid_Capacity2, Grid_Capacity3, s_Grid_Capacity_2 = create_res_pv_2_dispatch_variables_constraints(prob, objective_terms, input_data, power, state, data, intervals, UNITS, CONV, RES, PV, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, Load_forecast, RES_forecast, RES_sum, M, s_power_minus)
+        with build_tracker.section("res_pv_dispatch_variables"):
+            prob, objective_terms, setpoint, Min_grid_capacity_1, Min_grid_capacity_2, Min_Power_Calc, m, rel_var, g1, g2, g3, g4, Grid_Capacity1, Grid_Capacity2, Grid_Capacity3, s_Grid_Capacity_2 = create_res_pv_2_dispatch_variables_constraints(prob, objective_terms, input_data, power, state, data, intervals, UNITS, CONV, RES, PV, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, Load_forecast, RES_forecast, RES_sum, M, s_power_minus)
     else:
-        for i in RES:
-            for t in intervals[1:]:
-                objective_terms += (
-                        (RES_forecast[t - 1][i] - power[i][t]) * 1000 * input_data["Time_granularity"]  #RES_forecast[t - 1][i]
-                )
-                # pass
+        with build_tracker.section("res_curtailment_objective"):
+            for i in RES:
+                for t in intervals[1:]:
+                    objective_terms += (
+                            (RES_forecast[t - 1][i] - power[i][t]) * 1000 * input_data["Time_granularity"]  #RES_forecast[t - 1][i]
+                    )
+                    # pass
     if input_data["constraints"]["testing_mode_constraints"]:
-        prob, objective_terms = create_testing_mode_constraints(prob, objective_terms, input_data, data, power, intervals, CONV)
+        with build_tracker.section("testing_mode"):
+            prob, objective_terms = create_testing_mode_constraints(prob, objective_terms, input_data, data, power, intervals, CONV)
     if input_data["constraints"]["OOS_mode_constraints"]:
-        prob, objective_terms = create_OOS_mode_constraints(prob, objective_terms, input_data, data, power, intervals, PV_no_SP)
+        with build_tracker.section("oos_mode"):
+            prob, objective_terms = create_OOS_mode_constraints(prob, objective_terms, input_data, data, power, intervals, PV_no_SP)
     # if input_data["constraints"]["operating_states_max_time_constraints"]:
     #     prob = create_operating_state_max_time_constraints(prob, data, u_2_dict, IntervalCount, intervals, CONV, RES)
     # if input_data["constraints"]["operating_states_max_transition_time_between_states_constraint_a"]:
     #     prob = create_max_transition_time_between_states_constraints_a(prob, data, u_2_dict, IntervalCount, intervals)
     if input_data["constraints"]["operating_states_max_transition_time_between_states_constraint_b"]:
-        prob, objective_terms = create_max_transition_time_between_states_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals)
+        with build_tracker.section("max_transition_time_between_states_b"):
+            prob, objective_terms = create_max_transition_time_between_states_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals)
     if input_data["constraints"]["states_time_constraint"]:
         # print('--------- states --------')
-        prob, objective_terms = create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown)
+        with build_tracker.section("state_minimum_time"):
+            prob, objective_terms = create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown)
 
     # prob += u_2_dict[(2, 8, 4)] == 1
     # prob += u_2_dict[(2, 16, 6)] == 1
@@ -2071,24 +2102,26 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
 
     # prob += u_2_dict[(gen_id, t, operating_state_id)] == 1
 
-    for i, gen in enumerate(data):
-        for t in intervals[1:]:
-            if i in CONV:
-                objective_terms += (
-                        gen.get('start_up_cost(euro)', 0) * startup[i][t] + gen.get('shut_down_cost(euro)', 0) *
-                        shutdown[i][t] + state[i][t] * (+100) * input_data["Time_granularity"]
-                )
-            #
-            # the two following conditional terms, could be commented out as there is already the
-            # term that pushes the solution to be as close to the rdas solution, as possible
+    with build_tracker.section("commitment_objective_terms"):
+        for i, gen in enumerate(data):
+            for t in intervals[1:]:
+                if i in CONV:
+                    objective_terms += (
+                            gen.get('start_up_cost(euro)', 0) * startup[i][t] + gen.get('shut_down_cost(euro)', 0) *
+                            shutdown[i][t] + state[i][t] * (+100) * input_data["Time_granularity"]
+                    )
+                #
+                # the two following conditional terms, could be commented out as there is already the
+                # term that pushes the solution to be as close to the rdas solution, as possible
 
-            # if i in RES:
-            #     objective_terms += power[i][t] * (-11320) * input_data["Time_granularity"]  #(-1000) -11320
+                # if i in RES:
+                #     objective_terms += power[i][t] * (-11320) * input_data["Time_granularity"]  #(-1000) -11320
 
     # objective_terms += 13123000000
 
     # Add the objective terms to the objective function
-    prob += pl.lpSum(objective_terms)
+    with build_tracker.section("objective"):
+        prob += pl.lpSum(objective_terms)
 
     # Check if the problem is an MIP problem
     if prob.isMIP():
@@ -2152,6 +2185,18 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     #     # Additional parameters as needed
     # ])
     # prob.solve(highs_solver)
+    constraint_sections = build_tracker.summary()
+    print("Constraint build sections:")
+    for section in constraint_sections:
+        print(
+            f"  {section['section']}: "
+            f"+{section['constraints_added']} constraints, "
+            f"+{section['variables_added']} variables"
+        )
+
+    renamed_constraints = name_auto_constraints(prob)
+    print(f"Named anonymous constraints: {renamed_constraints}")
+
     # Write the model to an MPS file without solving
 
     mps_filename = "example_model.mps"
@@ -2309,7 +2354,20 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     # #     Total_cost[t] = round(Total_cost[t],
     # #                           2)  # we should divide by 4 some cost variables because the respective cost is calculated per hour
     # # Total_cost = [0, 0]
-    return prob.variables(), RES, Solution_Status
+    solve_metadata = {
+        "solver": solver_name,
+        "solution_status": Solution_Status,
+        "objective_value": round(pl.value(prob.objective), 8),
+        "big_m": M,
+        "num_constraints": prob.numConstraints(),
+        "num_variables": prob.numVariables(),
+        "anonymous_constraints_named": renamed_constraints,
+        "constraint_sections": constraint_sections,
+        "mps_file": mps_filename,
+        "model_build_and_solve_seconds": round(execution_time_2, 3),
+    }
+
+    return prob.variables(), RES, Solution_Status, solve_metadata
 
 # def define_and_solve_problem(binary_vars, integer_vars, continuous_vars):
 #
@@ -4165,7 +4223,7 @@ def parse_and_execute_optimization(input_data):
     x_load = input_data['Cost_parameters']['x_load']
 
     # create .mps file through pulp
-    solution, RES, Solution_Status = define_problem_and_solve_problem(data=data,
+    solution, RES, Solution_Status, solve_metadata = define_problem_and_solve_problem(data=data,
         input_data=input_data, UNITS=UNITS,
         RES=RES, PV=PV, CONV=CONV, RES_SP=RES_SP, RES_no_SP=RES_no_SP, PV_SP=PV_SP, PV_no_SP=PV_no_SP, Partially_Controllable=Partially_Controllable,
         RES_forecast=RES_forecast,
@@ -4223,6 +4281,7 @@ def parse_and_execute_optimization(input_data):
                                    primary_upwards_APRV, primary_downwards_APRV, secondary_upwards_APRV,
                                    secondary_downwards_APRV,
                                    tertiary_upwards_APRV, tertiary_downwards_APRV)
+    data_output_json["Solve_Metadata"] = solve_metadata
 
 
 

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MMS Optimization Input",
+  "type": "object",
+  "required": [
+    "Cost_parameters",
+    "Other_coefficients",
+    "constraints",
+    "optimization_parameters",
+    "Generating_Units",
+    "Time_granularity",
+    "Load_forecast"
+  ],
+  "properties": {
+    "Cost_parameters": { "type": "object" },
+    "Other_coefficients": { "type": "object" },
+    "constraints": { "type": "object" },
+    "optimization_parameters": {
+      "type": "object",
+      "properties": {
+        "solver": { "enum": ["highs", "cbc"] },
+        "require_optimal": { "type": "boolean" },
+        "big_m": {
+          "oneOf": [
+            { "const": "auto" },
+            { "type": "number", "exclusiveMinimum": 0 }
+          ]
+        },
+        "early_stopping": {
+          "type": "object",
+          "properties": {
+            "time_limit": {
+              "oneOf": [
+                { "type": "null" },
+                { "type": "number", "exclusiveMinimum": 0 }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "Generating_Units": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "gen_id",
+          "comments",
+          "state",
+          "current_Power(MW)",
+          "availability",
+          "Production_Forecast",
+          "max_power(MW)",
+          "min_power(MW)",
+          "operating-states",
+          "operating-state-transitions"
+        ]
+      }
+    },
+    "Time_granularity": { "type": "number", "exclusiveMinimum": 0 },
+    "Load_forecast": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "number", "minimum": 0 }
+    }
+  }
+}

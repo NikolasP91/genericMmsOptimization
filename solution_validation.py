@@ -109,11 +109,16 @@ def validate_solution(input_data, output_data, tolerance=1e-3):
 
     availability_violations = []
     state_power_violations = []
+    binary_violations = []
+    startup_shutdown_violations = []
     for index, unit in enumerate(output_units):
         input_unit = input_units[index] if index < len(input_units) else {}
         availability = _as_list(input_unit.get("availability", []))
         powers = _as_list(unit.get("Power", []))
         states = _as_list(unit.get("State", []))
+        startups = _as_list(unit.get("Startup", []))
+        shutdowns = _as_list(unit.get("Shutdown", []))
+        previous_state = input_unit.get("state", 0)
         for period, power in enumerate(powers):
             if not _is_number(power):
                 continue
@@ -130,6 +135,37 @@ def validate_solution(input_data, output_data, tolerance=1e-3):
                     state_power_violations.append(
                         f"unit {index} period {period + 1} has state {states[period]} and power {power}"
                     )
+        for period, state_value in enumerate(states):
+            if not _is_number(state_value):
+                continue
+            if min(abs(state_value), abs(state_value - 1)) > tolerance:
+                binary_violations.append(
+                    f"unit {index} period {period + 1} has nonbinary state {state_value}"
+                )
+            if period < len(startups) and _is_number(startups[period]):
+                if min(abs(startups[period]), abs(startups[period] - 1)) > tolerance:
+                    binary_violations.append(
+                        f"unit {index} period {period + 1} has nonbinary startup {startups[period]}"
+                    )
+            if period < len(shutdowns) and _is_number(shutdowns[period]):
+                if min(abs(shutdowns[period]), abs(shutdowns[period] - 1)) > tolerance:
+                    binary_violations.append(
+                        f"unit {index} period {period + 1} has nonbinary shutdown {shutdowns[period]}"
+                    )
+            if _is_number(previous_state):
+                expected_startup = max(0, round(state_value) - round(previous_state))
+                expected_shutdown = max(0, round(previous_state) - round(state_value))
+                if period < len(startups) and _is_number(startups[period]):
+                    if abs(startups[period] - expected_startup) > tolerance:
+                        startup_shutdown_violations.append(
+                            f"unit {index} period {period + 1} startup {startups[period]} expected {expected_startup}"
+                        )
+                if period < len(shutdowns) and _is_number(shutdowns[period]):
+                    if abs(shutdowns[period] - expected_shutdown) > tolerance:
+                        startup_shutdown_violations.append(
+                            f"unit {index} period {period + 1} shutdown {shutdowns[period]} expected {expected_shutdown}"
+                        )
+            previous_state = state_value
     _add_check(
         checks,
         "availability_bounds",
@@ -146,9 +182,31 @@ def validate_solution(input_data, output_data, tolerance=1e-3):
         if state_power_violations
         else "No unit produces power while reported off.",
     )
+    _add_check(
+        checks,
+        "binary_commitment_outputs",
+        not binary_violations,
+        "; ".join(binary_violations[:10])
+        if binary_violations
+        else "State, startup, and shutdown outputs are binary within tolerance.",
+    )
+    _add_check(
+        checks,
+        "startup_shutdown_consistency",
+        not startup_shutdown_violations,
+        "; ".join(startup_shutdown_violations[:10])
+        if startup_shutdown_violations
+        else "Startup and shutdown outputs match consecutive state changes.",
+    )
 
     reserve_errors = []
+    reserve_limits = {
+        "Primary_Active_Power_Reserves(MW)": "Primary_Active_Power_Reserves(MW)",
+        "Secondary_Active_Power_Reserves(MW)": "Secondary_Active_Power_Reserves(MW)",
+        "Tertiary_Active_Power_Reserves(MW)": "Tertiary_Active_Power_Reserves(MW)",
+    }
     for unit_index, unit in enumerate(output_units):
+        input_unit = input_units[unit_index] if unit_index < len(input_units) else {}
         for reserve_field in (
             "Primary_Active_Power_Reserves(MW)",
             "Secondary_Active_Power_Reserves(MW)",
@@ -172,6 +230,19 @@ def validate_solution(input_data, output_data, tolerance=1e-3):
                     reserve_errors.append(
                         f"unit {unit_index} {reserve_field}[{direction_index}] has negative values"
                     )
+                input_limits = input_unit.get(reserve_limits[reserve_field], [])
+                if isinstance(input_limits, list) and direction_index < len(input_limits):
+                    reserve_limit = input_limits[direction_index]
+                    if _is_number(reserve_limit):
+                        over_limit_values = [
+                            value
+                            for value in values
+                            if _is_number(value) and value - reserve_limit > tolerance
+                        ]
+                        if over_limit_values:
+                            reserve_errors.append(
+                                f"unit {unit_index} {reserve_field}[{direction_index}] exceeds limit {reserve_limit}"
+                            )
     _add_check(
         checks,
         "reserve_outputs",

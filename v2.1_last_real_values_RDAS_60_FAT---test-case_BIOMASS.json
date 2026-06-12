@@ -62,6 +62,7 @@
   "optimization_parameters": {
     "solver": "highs",
     "require_optimal": true,
+    "big_m": "auto",
     "highs_options": {
       "user_objective_scale": -4
     },

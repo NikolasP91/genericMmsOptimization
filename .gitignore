@@ -8,6 +8,8 @@ __pycache__/
 *.lp
 *.sol
 solver_log.txt
+run_log*.txt
+runs/
 solution_values*.json
 Final_highsNative_solution_values.json
 optimization_output.json

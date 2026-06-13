@@ -52,12 +52,12 @@
     "secondary_active_power_reserves_constraint": true,
     "tertiary_active_power_reserves_constraint": true,
     "ramp_up_down_constraints": true,
-    "forbidden_zones_constraint": false,
-    "must_run_units_constraint": false,
+    "forbidden_zones_constraint": true,
+    "must_run_units_constraint": true,
     "allowed_thermal_states_transition_constraints": true,
     "res_pv_dispatch_variables_constraints": true,
     "testing_mode_constraints": true,
-    "OOS_mode_constraints": false
+    "OOS_mode_constraints": true
   },
   "optimization_parameters": {
     "solver": "highs",

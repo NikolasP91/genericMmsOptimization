@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pulp as pl
 
+from mms.model.bounds import reserve_activation_bound
+
 
 def create_primary_active_power_reserves_constraint(prob, input_data, objective_terms, power, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M,  PV, largest_online_capacity, largest_two_online_capacity):
     # epsilon = 0.001
@@ -24,6 +26,12 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
             if operating_state['isOperational']:
 
                 for t in intervals[1:]:
+                    primary_up_bound = reserve_activation_bound(
+                        gen, "Primary_Active_Power_Reserves(MW)", 0, t - 1, operating_state
+                    )
+                    primary_down_bound = reserve_activation_bound(
+                        gen, "Primary_Active_Power_Reserves(MW)", 1, t - 1, operating_state
+                    )
                     if gen['availability'][t-1] == 0:
                         prob += primary_ActPR_plus[i][t] == 0
                         prob += primary_ActPR_minus[i][t] == 0
@@ -38,8 +46,8 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
                             prob += primary_ActPR_minus[i][t] <= gen["Primary_Active_Power_Reserves(MW)"][1] + M * (1 - u_2_dict[(gen_id, t, operating_state_id)])
                             prob += primary_ActPR_minus[i][t] <= power[i][t] - operating_state['user_min_power'] + M * (1 - u_2_dict[(gen_id, t, operating_state_id)])
 
-                            prob += primary_ActPR_plus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
-                            prob += primary_ActPR_minus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += primary_ActPR_plus[i][t] <= primary_up_bound * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += primary_ActPR_minus[i][t] <= primary_down_bound * u_2_dict[(gen_id, t, operating_state_id)]
 
                         else:
                             prob += primary_ActPR_plus[i][t] <= gen['availability'][t - 1] - power[i][t]
@@ -50,8 +58,8 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
                             prob += primary_ActPR_minus[i][t] <= power[i][t] - gen['min_power(MW)'][t - 1] + M * (
                                         1 - u_2_dict[(gen_id, t, operating_state_id)])
 
-                            prob += primary_ActPR_plus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
-                            prob += primary_ActPR_minus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += primary_ActPR_plus[i][t] <= primary_up_bound * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += primary_ActPR_minus[i][t] <= primary_down_bound * u_2_dict[(gen_id, t, operating_state_id)]
 
 
 
@@ -96,6 +104,12 @@ def create_secondary_active_power_reserves_constraint(prob, input_data, objectiv
             if operating_state['isOperational']:
 
                 for t in intervals[1:]:
+                    secondary_up_bound = reserve_activation_bound(
+                        gen, "Secondary_Active_Power_Reserves(MW)", 0, t - 1, operating_state
+                    )
+                    secondary_down_bound = reserve_activation_bound(
+                        gen, "Secondary_Active_Power_Reserves(MW)", 1, t - 1, operating_state
+                    )
                     if i in on_AGC:  # provision of secondary reserves
                         if gen['availability'][t-1] == 0:
                             prob += secondary_ActPR_plus[i][t] == 0
@@ -117,17 +131,17 @@ def create_secondary_active_power_reserves_constraint(prob, input_data, objectiv
 
                             prob += (power[i][t] + primary_ActPR_plus[i][t]) - operating_state["max-power"][t - 1] >= - M * (1 - y_plus[i][t])
                             prob += (power[i][t] + primary_ActPR_plus[i][t]) - operating_state["max-power"][t - 1] <= M * y_plus[i][t]
-                            prob += secondary_ActPR_plus[i][t] <= M * (1 - y_plus[i][t])
+                            prob += secondary_ActPR_plus[i][t] <= secondary_up_bound * (1 - y_plus[i][t])
 
 #                                                             # if y_minus==1 --> secondary_ActPR_minus == 0
                             prob += (power[i][t] - primary_ActPR_minus[i][t]) - operating_state["min-power"][t - 1] <= M * (1 - y_minus[i][t])
                             prob += (power[i][t] - primary_ActPR_minus[i][t]) - operating_state["min-power"][t - 1] >= - M * y_minus[i][t]
-                            prob += secondary_ActPR_minus[i][t] <= M * (1 - y_minus[i][t])
+                            prob += secondary_ActPR_minus[i][t] <= secondary_down_bound * (1 - y_minus[i][t])
 
 #                                    #########################
 
-                            prob += secondary_ActPR_minus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]  # power[i][t] - gen['min_power(MW)'] < 0 ---> primary_ActPR_minus[i][t] == 0
-                            prob += secondary_ActPR_plus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]  # power[i][t] - gen['min_power(MW)'] < 0 ---> primary_ActPR_plus[i][t] == 0
+                            prob += secondary_ActPR_minus[i][t] <= secondary_down_bound * u_2_dict[(gen_id, t, operating_state_id)]  # power[i][t] - gen['min_power(MW)'] < 0 ---> primary_ActPR_minus[i][t] == 0
+                            prob += secondary_ActPR_plus[i][t] <= secondary_up_bound * u_2_dict[(gen_id, t, operating_state_id)]  # power[i][t] - gen['min_power(MW)'] < 0 ---> primary_ActPR_plus[i][t] == 0
                     else:  # no provision of secondary reserves
                         prob += secondary_ActPR_plus[i][t] == 0
                         prob += secondary_ActPR_minus[i][t] == 0
@@ -184,6 +198,12 @@ def create_tertiary_active_power_reserves_constraint(prob, input_data, objective
             operating_state_id = operating_state['id']
             if operating_state['isOperational']:
                 for t in intervals[1:]:
+                    tertiary_up_bound = reserve_activation_bound(
+                        gen, "Tertiary_Active_Power_Reserves(MW)", 0, t - 1, operating_state
+                    )
+                    tertiary_down_bound = reserve_activation_bound(
+                        gen, "Tertiary_Active_Power_Reserves(MW)", 1, t - 1, operating_state
+                    )
                     if i in on_AGC:
                         if gen['availability'][t - 1] == 0:
                             prob += tertiary_ActPR_plus[i][t] == 0
@@ -198,14 +218,14 @@ def create_tertiary_active_power_reserves_constraint(prob, input_data, objective
 
 ###########################################################
 
-                            prob += tertiary_ActPR_plus[i][t] <= M * (1 - y_plus[i][t])
+                            prob += tertiary_ActPR_plus[i][t] <= tertiary_up_bound * (1 - y_plus[i][t])
 
-                            prob += tertiary_ActPR_minus[i][t] <= M * (1 - y_minus[i][t])
+                            prob += tertiary_ActPR_minus[i][t] <= tertiary_down_bound * (1 - y_minus[i][t])
 
 ##########################################################
                             # take into account only spinning active power reserves (for now)
-                            prob += tertiary_ActPR_plus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
-                            prob += tertiary_ActPR_minus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += tertiary_ActPR_plus[i][t] <= tertiary_up_bound * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += tertiary_ActPR_minus[i][t] <= tertiary_down_bound * u_2_dict[(gen_id, t, operating_state_id)]
                     else:
                         if gen['availability'][t - 1] == 0:
                             prob += tertiary_ActPR_plus[i][t] == 0
@@ -222,8 +242,8 @@ def create_tertiary_active_power_reserves_constraint(prob, input_data, objective
 
 
                             # take into account only spinning active power reserves (for now)
-                            prob += tertiary_ActPR_plus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
-                            prob += tertiary_ActPR_minus[i][t] <= M * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += tertiary_ActPR_plus[i][t] <= tertiary_up_bound * u_2_dict[(gen_id, t, operating_state_id)]
+                            prob += tertiary_ActPR_minus[i][t] <= tertiary_down_bound * u_2_dict[(gen_id, t, operating_state_id)]
 
         for t in intervals[1:]:  # calculate the cost of APR only for this time horizon (2nd dispatch period up to the first of the next time horizon)
             objective_terms += tertiary_ActPR_plus[i][t] * gen['Tertiary_APR_Cost(euro/MW)'][0] * input_data["Time_granularity"] + tertiary_ActPR_minus[i][t] * gen['Tertiary_APR_Cost(euro/MW)'][1] * input_data["Time_granularity"]

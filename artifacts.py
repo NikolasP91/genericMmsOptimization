@@ -16,7 +16,14 @@ def write_json(path, data):
         json.dump(data, f, indent=2)
 
 
-def write_run_artifacts(artifact_dir, input_data, output_data=None, error_report=None, log_file=None):
+def write_run_artifacts(
+    artifact_dir,
+    input_data,
+    output_data=None,
+    error_report=None,
+    diagnostics_report=None,
+    log_file=None,
+):
     if artifact_dir is None:
         return
     write_json(artifact_dir / "input_snapshot.json", input_data)
@@ -34,8 +41,16 @@ def write_run_artifacts(artifact_dir, input_data, output_data=None, error_report
             write_json(artifact_dir / "reserve_monitoring_report.json", output_data["Reserve_Monitoring_Report"])
         if "RES_Curtailment_Report" in output_data:
             write_json(artifact_dir / "res_curtailment_report.json", output_data["RES_Curtailment_Report"])
+        if "Warning_Report" in output_data:
+            write_json(artifact_dir / "warning_report.json", output_data["Warning_Report"])
+        if "Diagnostics_Report" in output_data:
+            write_json(artifact_dir / "diagnostics_report.json", output_data["Diagnostics_Report"])
+        if "Performance_Profile" in output_data:
+            write_json(artifact_dir / "performance_profile.json", output_data["Performance_Profile"])
     if error_report is not None:
         write_json(artifact_dir / "error_report.json", error_report)
+    if diagnostics_report is not None:
+        write_json(artifact_dir / "diagnostics_report.json", diagnostics_report)
     if log_file:
         log_path = Path(log_file)
         if log_path.exists():

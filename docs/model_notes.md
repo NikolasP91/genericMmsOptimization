@@ -37,6 +37,10 @@ implemented.
   formulation.
 - MMS-style post-solve reports for dispatch instructions, reserve monitoring,
   and RES/PV curtailment.
+- Structured warning and diagnostics reports for validation failures, reserve
+  shortfalls, nonzero relaxation/slack values, and non-optimal solver status.
+- Run-level and pipeline-level performance profiling in the output and artifact
+  set.
 
 ## Model Package Layout
 
@@ -55,6 +59,8 @@ The active optimization algebra has been modularized under `mms/model/`:
 - `reserves.py`: primary, secondary, and tertiary active-power reserve algebra.
 - `res_dispatch.py`: RES/PV dispatch, setpoint, grid-capacity, and curtailment
   variables.
+- `bounds.py`: local bound helpers used to replace broad big-M constants where
+  constraint-specific limits are available.
 
 The active workflow is now split across:
 
@@ -102,6 +108,31 @@ Post-solve validation checks include:
 - Reported APR violation arrays are zero within tolerance.
 
 The validation report is embedded under the `Validation` key in the output JSON.
+
+## Diagnostics And Warnings
+
+The runner now builds structured warning and diagnostics payloads after every
+successful solve, and writes a diagnostics report on input-validation or
+optimization failures.
+
+`Warning_Report` records:
+
+- Nonzero load curtailment / augmentation.
+- Nonzero APR violation slack fields.
+- Reserve-monitoring shortfalls by reserve type, direction, and period.
+- Failed validation checks with their severity.
+
+`Diagnostics_Report` summarizes:
+
+- Solver and validation status.
+- Validation and solve issues, including non-optimal solver statuses such as
+  infeasible or unbounded outcomes.
+- Maximum load-curtailment and APR slack magnitudes.
+- RES/PV curtailment totals.
+- Model size, objective, big-M value, and the slowest constraint build sections.
+
+These reports are intended to make infeasible or degraded runs auditable without
+requiring manual parsing of the console log.
 
 Run the validation unit tests with:
 
@@ -161,6 +192,18 @@ the former `N_1` / `N_2` binary selector formulation. This removes selector
 binaries and big-M comparison constraints while preserving the reserve-sizing
 quantities needed by the current deterministic case.
 
+Several remaining broad big-M bounds have also been tightened with local
+constraint-specific bounds:
+
+- Reserve activation upper bounds use the applicable reserve capability,
+  availability, and selected operating-state limits.
+- Forbidden-zone disjunctions use a local zone/availability bound, capped by the
+  configured global big-M value.
+
+Some RES/PV setpoint-selector and reserve disjunctive constraints still use the
+global big-M because they involve endogenous relaxed quantities that need a more
+careful reformulation before tightening.
+
 ## Reproducibility Artifacts
 
 By default, `main.py` writes run artifacts to `runs/latest`:
@@ -174,6 +217,9 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `dispatch_instructions.json`
 - `reserve_monitoring_report.json`
 - `res_curtailment_report.json`
+- `warning_report.json`
+- `diagnostics_report.json`
+- `performance_profile.json`
 - `run_events.jsonl`
 - `run_log.txt`
 - `solver_log.txt`
@@ -189,6 +235,10 @@ The output JSON includes:
 - `Dispatch_Instructions`, `Reserve_Monitoring_Report`, and
   `RES_Curtailment_Report`: MMS-style DS evidence derived from the solved
   schedule. These are also written as separate artifacts under `runs/latest`.
+- `Warning_Report` and `Diagnostics_Report`: structured run health evidence.
+- `Performance_Profile`: total runtime plus stage timings for input loading,
+  validation, model build/solve, post-solve reports, diagnostics, output, and
+  artifact writing.
 
 The plain text run log mirrors Python/application console output. The native
 HiGHS solver log is written separately when HiGHS is used. The JSONL event log
@@ -198,8 +248,10 @@ completion, and artifact writing.
 ## Benchmark Fixtures
 
 `benchmarks/known_answer_cases.json` contains small hand-checkable validation
-cases. They are intentionally tiny, so they can run quickly in unit tests and
-catch regressions in the accounting logic.
+and reporting cases. They cover exact load balance, RES curtailment accounting,
+reserve shortfall diagnostics, commitment transition instructions, and filtering
+of fully unavailable units. They are intentionally tiny, so they can run quickly
+in unit tests and catch regressions in the accounting logic.
 
 `tests/test_full_run_regression.py` runs the accepted biomass case through
 `main.py` and checks the known objective value, solver status, validation
@@ -209,7 +261,7 @@ but it protects the full DS execution path.
 ## Research-Grade Improvements Still To Do
 
 - Continue replacing broad big-M constants with constraint-specific tight bounds
-  in remaining ramping, reserve-availability, and forbidden-zone constraints.
+  in remaining RES/PV setpoint-selector and reserve-disjunction constraints.
 - Add additional full optimization benchmark cases with known optimal schedules
   and objective values.
 - Add equation-level documentation for each constraint family.

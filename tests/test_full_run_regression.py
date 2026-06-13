@@ -27,11 +27,11 @@ class FullRunRegressionTests(unittest.TestCase):
                     str(output_path),
                     "--artifacts-dir",
                     str(artifact_dir),
-                "--log-file",
-                str(log_path),
-                "--solver-log-file",
-                str(artifact_dir / "solver_log.txt"),
-            ],
+                    "--log-file",
+                    str(log_path),
+                    "--solver-log-file",
+                    str(artifact_dir / "solver_log.txt"),
+                ],
                 cwd=ROOT,
                 text=True,
                 capture_output=True,
@@ -54,6 +54,12 @@ class FullRunRegressionTests(unittest.TestCase):
             self.assertEqual(11442, solve_metadata["num_constraints"])
             self.assertEqual(4973, solve_metadata["num_variables"])
             self.assertEqual(1000.0, solve_metadata["big_m"])
+            self.assertGreaterEqual(solve_metadata["mps_write_seconds"], 0)
+            self.assertGreaterEqual(solve_metadata["solver_seconds"], 0)
+            self.assertEqual("passed", output["Diagnostics_Report"]["status"])
+            self.assertIn(output["Warning_Report"]["status"], ("passed", "warning"))
+            self.assertGreater(output["Performance_Profile"]["total_seconds"], 0)
+            self.assertIn("pipeline", output["Performance_Profile"])
 
             expected_artifacts = [
                 "input_snapshot.json",
@@ -64,6 +70,9 @@ class FullRunRegressionTests(unittest.TestCase):
                 "dispatch_instructions.json",
                 "reserve_monitoring_report.json",
                 "res_curtailment_report.json",
+                "warning_report.json",
+                "diagnostics_report.json",
+                "performance_profile.json",
                 "run_events.jsonl",
                 "run_log.txt",
                 "solver_log.txt",

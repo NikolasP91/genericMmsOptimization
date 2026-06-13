@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 from RV_genericMmsOptimization import define_problem_and_solve_problem as public_problem_entry
+from mms.model.bounds import forbidden_zone_big_m, reserve_activation_bound
 from mms.model.preprocessing import filter_generating_units, round_to_best, time_granularity, unit_categories
 from mms.model.problem import define_problem_and_solve_problem
 
@@ -105,6 +106,39 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         self.assertEqual(3, round_to_best(45, 15))
         self.assertEqual(4, round_to_best(46, 15))
         self.assertEqual(100000000000, round_to_best(float("inf"), 15))
+
+    def test_reserve_activation_bound_uses_unit_and_state_limits(self):
+        unit = {
+            "availability": [12],
+            "Primary_Active_Power_Reserves(MW)": [20, 20],
+        }
+        operating_state = {
+            "max-power": [9],
+            "min-power": [3],
+            "user_max_power": 8,
+            "user_min_power": 4,
+        }
+
+        self.assertEqual(
+            8.0,
+            reserve_activation_bound(
+                unit, "Primary_Active_Power_Reserves(MW)", 0, 0, operating_state
+            ),
+        )
+        self.assertEqual(
+            8.0,
+            reserve_activation_bound(
+                unit, "Primary_Active_Power_Reserves(MW)", 1, 0, operating_state
+            ),
+        )
+
+    def test_forbidden_zone_big_m_is_local_and_never_larger_than_fallback(self):
+        unit = {"availability": [20]}
+        local_m = forbidden_zone_big_m(unit, [8, 12], 0, 1000)
+
+        self.assertGreaterEqual(local_m, 10)
+        self.assertLess(local_m, 1000)
+        self.assertEqual(5.0, forbidden_zone_big_m(unit, [8, 12], 0, 5))
 
 
 if __name__ == "__main__":

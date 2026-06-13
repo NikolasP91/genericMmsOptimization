@@ -429,7 +429,9 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     # Write the model to an MPS file without solving
 
     mps_filename = "example_model.mps"
+    mps_write_start = time.time()
     prob.writeMPS(mps_filename)
+    mps_write_seconds = time.time() - mps_write_start
 
     print(f"Model successfully written to {mps_filename} without solving.")
     end_time = time.time()
@@ -454,7 +456,9 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     print("Number of constraints:", prob.numConstraints())
     print("Number of variables:", prob.numVariables())
     print("")
+    solver_start_time = time.time()
     prob.solve(solver)
+    solver_seconds = time.time() - solver_start_time
 
     Solution_Status = pl.LpStatus[prob.status]
     print("Objective function cost =", round(pl.value(prob.objective), 2))
@@ -593,6 +597,8 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
         "anonymous_constraints_named": renamed_constraints,
         "constraint_sections": constraint_sections,
         "mps_file": mps_filename,
+        "mps_write_seconds": round(mps_write_seconds, 3),
+        "solver_seconds": round(solver_seconds, 3),
         "model_build_and_solve_seconds": round(execution_time_2, 3),
     }
 

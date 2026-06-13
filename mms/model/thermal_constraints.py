@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pulp as pl
 
+from mms.model.bounds import forbidden_zone_big_m
+
 
 def create_forbidden_zones_constraint(prob, objective_terms, input_data, power, data, intervals, CONV, M):
     y_zone = [[[pl.LpVariable(f'y_zone_{i + 1}_{t}_{idx}', 0, 1, cat='Binary') for idx, _ in
@@ -26,8 +28,9 @@ def create_forbidden_zones_constraint(prob, objective_terms, input_data, power, 
                         # print(zone[1])
                         lower_bound = zone[0]  # Unpack the bounds of the forbidden zone
                         upper_bound = zone[1]
-                        prob += power[i][t] - s_forbidden_zones_minus[i][t] <= lower_bound + M * y_zone[i][t][idx]  # prob += power[i][t] <= lower_bound - 0.001 + M * y_zone[i][t][idx]
-                        prob += power[i][t] + s_forbidden_zones_plus[i][t] >= upper_bound - M * (1 - y_zone[i][t][idx])  # prob += power[i][t] >= upper_bound + 0.001 - M * (1 - y_zone[i][t][idx])
+                        zone_m = forbidden_zone_big_m(data[i], zone, t - 1, M)
+                        prob += power[i][t] - s_forbidden_zones_minus[i][t] <= lower_bound + zone_m * y_zone[i][t][idx]  # prob += power[i][t] <= lower_bound - 0.001 + M * y_zone[i][t][idx]
+                        prob += power[i][t] + s_forbidden_zones_plus[i][t] >= upper_bound - zone_m * (1 - y_zone[i][t][idx])  # prob += power[i][t] >= upper_bound + 0.001 - M * (1 - y_zone[i][t][idx])
                         # else:
                         #
                         #     print(f"Warning: Skipping invalid forbidden zone {zone} for unit {i}"

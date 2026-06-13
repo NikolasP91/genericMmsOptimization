@@ -1,5 +1,7 @@
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original optimization workflow.
 
+from time import perf_counter
+
 from mms.model.preprocessing import filter_generating_units, time_granularity, unit_categories
 from mms.model.problem import define_problem_and_solve_problem
 from mms.postsolve import (
@@ -26,6 +28,18 @@ from mms.postsolve import (
 )
 
 def parse_and_execute_optimization(input_data):
+    pipeline_start = perf_counter()
+    stage_timings = []
+
+    def record_stage(stage, started_at):
+        stage_timings.append(
+            {
+                "stage": stage,
+                "seconds": round(perf_counter() - started_at, 6),
+            }
+        )
+
+    preprocessing_start = perf_counter()
     time_gran = input_data["Time_granularity"]
     input_data = time_granularity(input_data, time_gran)
     data = input_data.get('Generating_Units', [])
@@ -110,8 +124,10 @@ def parse_and_execute_optimization(input_data):
     # baseline_power_df = pd.DataFrame(baseline_power_list)
 
     x_load = input_data['Cost_parameters']['x_load']
+    record_stage("preprocessing", preprocessing_start)
 
     # create .mps file through pulp
+    solve_start = perf_counter()
     solution, RES, Solution_Status, solve_metadata = define_problem_and_solve_problem(data=data,
         input_data=input_data, UNITS=UNITS,
         RES=RES, PV=PV, CONV=CONV, RES_SP=RES_SP, RES_no_SP=RES_no_SP, PV_SP=PV_SP, PV_no_SP=PV_no_SP, Partially_Controllable=Partially_Controllable,
@@ -122,11 +138,13 @@ def parse_and_execute_optimization(input_data):
         on_AGC=on_AGC, warmStart=warmStart, keepFiles=keepFiles, logPath=logPath,
         timeLimit=timeLimit, solver_name=solver_name, gapRel=gapRel, gapAbs=gapAbs,
         threads=threads, solver_options=solver_options, require_optimal=require_optimal)
+    record_stage("model_build_mps_and_solve", solve_start)
 
 
 #----------------------------------------- .mps file created-------------------------------------------------
     # solution_dict, Solution_Status = define_and_solve_problem(binary_vars, integer_vars, continuous_vars)
 
+    postsolve_start = perf_counter()
     (power_df, state_df, startup_df, shutdown_df, ramp_relax_df, s_load_plus_df, s_load_minus_df,
     z_1_df, u_1_df, primary_ActPR_plus_df, primary_ActPR_minus_df, s_primary_APR_upwards_df,
     s_primary_APR_downwards_df, tertiary_ActPR_plus_df, tertiary_ActPR_minus_df, s_tertiary_APR_upwards_df,
@@ -172,6 +190,11 @@ def parse_and_execute_optimization(input_data):
                                    tertiary_upwards_APRV, tertiary_downwards_APRV)
     data_output_json["Solve_Metadata"] = solve_metadata
 
+    record_stage("postsolve_output_assembly", postsolve_start)
+    data_output_json["Performance_Profile"] = {
+        "pipeline_seconds": round(perf_counter() - pipeline_start, 6),
+        "pipeline_stages": stage_timings,
+    }
 
 
     return data_output_json

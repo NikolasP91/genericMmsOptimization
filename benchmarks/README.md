@@ -5,7 +5,9 @@ requirements in `docs/requirements_traceability.md`.
 
 Current benchmark coverage:
 
-- `known_answer_cases.json`: solution-validation accounting checks.
+- `known_answer_cases.json`: hand-checkable exact-balance, RES-curtailment,
+  reserve-shortfall, commitment-transition, and unavailable-unit filtering
+  checks.
 - `tests/test_mms_reports.py`: dispatch instruction, reserve monitoring, and
   RES curtailment report checks.
 - `tests/test_full_run_regression.py`: full accepted biomass-case optimization
@@ -14,11 +16,9 @@ Current benchmark coverage:
 
 Recommended next benchmark fixtures:
 
-- Additional DS cases with one thermal unit and one RES unit where curtailment is forced by
-  technical minimum generation.
-- A reserve-shortage case that produces a nonzero APR violation.
-- A commitment-transition case with an expected synchronization/desynchronization
-  instruction sequence.
-- A RES setpoint case with expected proportional curtailment.
+- Additional full optimization cases with known optimal objective values.
+- Edge cases for ramp-rate limits and operating-state minimum-time constraints.
+- Larger performance benchmark scenarios for comparing solver settings and
+  formulation variants.
 
 RTD benchmark cases are intentionally excluded from this project.

@@ -3,14 +3,16 @@ import argparse
 import json
 import sys
 import traceback
+from time import perf_counter
 from pathlib import Path
 
-from artifacts import prepare_artifact_dir, write_run_artifacts
+from artifacts import prepare_artifact_dir, write_json, write_run_artifacts
 from input_validation import (
     InputValidationError,
     assert_valid_input,
     format_input_validation_report,
 )
+from mms.diagnostics import build_diagnostics_report, build_warning_report
 from mms.logging_utils import JsonEventLogger, tee_output
 from mms.reports import build_mms_reports
 from run_metadata import build_run_metadata
@@ -81,6 +83,17 @@ def parse_args():
 
 
 def run(args):
+    run_start = perf_counter()
+    performance_stages = []
+
+    def record_stage(stage, started_at):
+        performance_stages.append(
+            {
+                "stage": stage,
+                "seconds": round(perf_counter() - started_at, 6),
+            }
+        )
+
     config_path = Path(args.config)
     output_path = Path(args.output)
     artifact_dir = prepare_artifact_dir(args.artifacts_dir)
@@ -95,8 +108,10 @@ def run(args):
         solver=args.solver,
     )
     print(f"Loading configuration from: {config_path}")
+    input_load_start = perf_counter()
     with config_path.open("r", encoding="utf-8") as f:
         input_data = json.load(f)
+    record_stage("input_load", input_load_start)
 
     if args.time_limit is not None:
         input_data.setdefault("optimization_parameters", {}).setdefault("early_stopping", {})[
@@ -116,6 +131,7 @@ def run(args):
     print(f"Using solver: {args.solver}")
 
     if not args.skip_input_validation:
+        input_validation_start = perf_counter()
         try:
             input_validation = assert_valid_input(input_data)
         except InputValidationError as e:
@@ -126,11 +142,19 @@ def run(args):
                 "warnings": e.warnings,
             }
             events.event("input_validation_failed", errors=len(e.errors), warnings=len(e.warnings))
+            diagnostics_report = build_diagnostics_report(
+                input_data, error_report=error_report, tolerance=args.validation_tolerance
+            )
             write_run_artifacts(
-                artifact_dir, input_data, error_report=error_report, log_file=args.log_file
+                artifact_dir,
+                input_data,
+                error_report=error_report,
+                diagnostics_report=diagnostics_report,
+                log_file=args.log_file,
             )
             print(format_input_validation_report(error_report))
             return 1
+        record_stage("input_validation", input_validation_start)
         print(format_input_validation_report(input_validation))
         events.event(
             "input_validation_passed",
@@ -138,28 +162,52 @@ def run(args):
         )
 
     try:
+        optimization_start = perf_counter()
         result = parse_and_execute_optimization(input_data)
+        record_stage("optimization_pipeline", optimization_start)
     except Exception as e:
         print(f"\nError during optimization: {e}")
         traceback_text = traceback.format_exc()
         print(traceback_text)
+        error_report = {
+            "stage": "optimization",
+            "error": str(e),
+            "traceback": traceback_text,
+        }
+        diagnostics_report = build_diagnostics_report(
+            input_data, error_report=error_report, tolerance=args.validation_tolerance
+        )
         write_run_artifacts(
             artifact_dir,
             input_data,
-            error_report={
-                "stage": "optimization",
-                "error": str(e),
-                "traceback": traceback_text,
-            },
+            error_report=error_report,
+            diagnostics_report=diagnostics_report,
             log_file=args.log_file,
         )
         events.event("optimization_failed", error=str(e))
         return 1
 
+    solution_validation_start = perf_counter()
     validation = validate_solution(input_data, result, tolerance=args.validation_tolerance)
+    record_stage("solution_validation", solution_validation_start)
     result["Validation"] = validation
+
+    report_start = perf_counter()
     result.update(build_mms_reports(input_data, result, tolerance=args.validation_tolerance))
+    record_stage("mms_report_building", report_start)
+
+    diagnostics_start = perf_counter()
+    result["Warning_Report"] = build_warning_report(
+        input_data, result, validation, tolerance=args.validation_tolerance
+    )
+    result["Diagnostics_Report"] = build_diagnostics_report(
+        input_data, result, validation, tolerance=args.validation_tolerance
+    )
+    record_stage("diagnostics_building", diagnostics_start)
+
+    metadata_start = perf_counter()
     result["Run_Metadata"] = build_run_metadata(input_data, config_path, output_path, args.solver)
+    record_stage("run_metadata", metadata_start)
     events.event(
         "optimization_finished",
         solution_status=result.get("Solution_Status", "Unknown"),
@@ -169,12 +217,20 @@ def run(args):
     )
     events.event("validation_finished", validation_status=validation.get("status"))
 
+    pipeline_profile = result.get("Performance_Profile", {})
+
+    def refresh_performance_profile():
+        result["Performance_Profile"] = {
+            "total_seconds": round(perf_counter() - run_start, 6),
+            "stages": performance_stages,
+            "pipeline": pipeline_profile,
+        }
+
+    output_write_start = perf_counter()
+    refresh_performance_profile()
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
-    sys.stdout.flush()
-    sys.stderr.flush()
-    write_run_artifacts(artifact_dir, input_data, output_data=result, log_file=args.log_file)
-    events.event("artifacts_written", artifact_dir=str(artifact_dir) if artifact_dir is not None else None)
+    record_stage("output_write", output_write_start)
 
     solution_status = result.get("Solution_Status", "Unknown")
     print(f"\nOptimization finished with status: {solution_status}")
@@ -184,7 +240,18 @@ def run(args):
         print(f"Artifacts written to: {artifact_dir}")
     sys.stdout.flush()
     sys.stderr.flush()
+    events.event("artifacts_writing", artifact_dir=str(artifact_dir) if artifact_dir is not None else None)
+    artifact_write_start = perf_counter()
+    refresh_performance_profile()
     write_run_artifacts(artifact_dir, input_data, output_data=result, log_file=args.log_file)
+    record_stage("artifact_write", artifact_write_start)
+    events.event("artifacts_written", artifact_dir=str(artifact_dir) if artifact_dir is not None else None)
+    refresh_performance_profile()
+    with output_path.open("w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2)
+    if artifact_dir is not None:
+        write_json(artifact_dir / "output_snapshot.json", result)
+        write_json(artifact_dir / "performance_profile.json", result["Performance_Profile"])
     return 0
 
 

@@ -27,6 +27,9 @@ By default the runner uses:
 - plain text run log: `run_log.txt`
 - structured event log: `runs/latest/run_events.jsonl`
 - native HiGHS solver log: `runs/latest/solver_log.txt`
+- structured warning/diagnostics reports: `runs/latest/warning_report.json`,
+  `runs/latest/diagnostics_report.json`
+- performance profile: `runs/latest/performance_profile.json`
 
 Useful options:
 
@@ -42,7 +45,8 @@ Useful options:
 Each run writes reproducibility metadata into the output JSON and artifact
 directory, including input hash, git commit, package versions, solver settings,
 model size, objective value, big-M value, validation results, plain text logs,
-native solver logs, and structured run events.
+native solver logs, structured warning/diagnostics reports, performance
+timings, and structured run events.
 
 ## Test
 
@@ -50,10 +54,11 @@ native solver logs, and structured run events.
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-The tests cover input validation, known-answer validation fixtures, output
-validation failure modes, constraint-section naming, stable run metadata hashing,
-logging utilities, report builders, module boundaries, and a full biomass-case
-optimization regression.
+The tests cover input validation, hand-checkable benchmark fixtures, output
+validation failure modes, structured diagnostics, constraint-section naming,
+local big-M bound helpers, stable run metadata hashing, logging utilities,
+report builders, module boundaries, and a full biomass-case optimization
+regression.
 
 ## Notes
 

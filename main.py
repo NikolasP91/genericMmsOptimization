@@ -12,9 +12,15 @@ from input_validation import (
     assert_valid_input,
     format_input_validation_report,
 )
-from mms.cost_curves import audit_thermal_cost_curves, build_thermal_cost_report
+from mms.cost_curves import (
+    audit_thermal_cost_curves,
+    build_thermal_cost_report,
+    prepare_thermal_cost_curves,
+)
 from mms.diagnostics import build_diagnostics_report, build_warning_report
 from mms.logging_utils import JsonEventLogger, tee_output
+from mms.objective import build_objective_breakdown_report
+from mms.penalties import audit_penalty_hierarchy
 from mms.reports import build_mms_reports
 from run_metadata import build_run_metadata
 from mms.pipeline import parse_and_execute_optimization
@@ -130,6 +136,7 @@ def run(args):
             ).setdefault("log_file", solver_log_file)
             events.event("solver_log_configured", solver_log_file=solver_log_file)
     print(f"Using solver: {args.solver}")
+    cost_curve_generation_report = prepare_thermal_cost_curves(input_data)
 
     if not args.skip_input_validation:
         input_validation_start = perf_counter()
@@ -201,7 +208,10 @@ def run(args):
     result["Thermal_Cost_Curve_Audit"] = audit_thermal_cost_curves(
         input_data, tolerance=args.validation_tolerance
     )
+    result["Thermal_Cost_Curve_Generation"] = cost_curve_generation_report
     result["Thermal_Cost_Report"] = build_thermal_cost_report(input_data, result)
+    result["Penalty_Hierarchy_Audit"] = audit_penalty_hierarchy(input_data)
+    result["Objective_Breakdown_Report"] = build_objective_breakdown_report(input_data, result)
     result["Warning_Report"] = build_warning_report(
         input_data, result, validation, tolerance=args.validation_tolerance
     )

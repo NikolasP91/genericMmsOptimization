@@ -43,6 +43,20 @@
           "exclusiveMinimum": 0,
           "description": "Optional explicit multiplier overriding cost_curve_time_unit."
         },
+        "thermal_cost_curve_generation": {
+          "type": "object",
+          "description": "Optional defaults for generating thermal PWL cost curves from quadratic coefficients.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "replace_existing": { "type": "boolean" },
+            "segments": { "type": "integer", "minimum": 1 },
+            "breakpoints": {
+              "type": "array",
+              "minItems": 2,
+              "items": { "type": "number" }
+            }
+          }
+        },
         "early_stopping": {
           "type": "object",
           "properties": {
@@ -92,6 +106,50 @@
             ],
             "minItems": 2,
             "maxItems": 2
+          },
+          "quadratic_cost_coefficients": {
+            "type": "object",
+            "description": "Optional source quadratic cost curve C(P)=aP^2+bP+c used to generate or verify PWL costs.",
+            "required": ["a", "b", "c"],
+            "properties": {
+              "a": { "type": "number" },
+              "b": { "type": "number" },
+              "c": { "type": "number" }
+            }
+          },
+          "cost_curve_generation": {
+            "type": "object",
+            "description": "Optional per-unit controls for quadratic-to-PWL generation.",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "replace_existing": { "type": "boolean" },
+              "segments": { "type": "integer", "minimum": 1 },
+              "breakpoints": {
+                "type": "array",
+                "minItems": 2,
+                "items": { "type": "number" }
+              }
+            }
+          },
+          "cost_curve_source": {
+            "type": "object",
+            "description": "Optional provenance for thermal production-cost data.",
+            "properties": {
+              "type": {
+                "enum": [
+                  "manual_pwl",
+                  "generated_from_quadratic",
+                  "offer_curve",
+                  "measured_heat_rate",
+                  "other"
+                ]
+              },
+              "reference": { "type": "string" },
+              "currency": { "type": "string" },
+              "basis": { "type": "string" },
+              "method": { "type": "string" },
+              "notes": { "type": "string" }
+            }
           }
         }
       }

@@ -1,4 +1,5 @@
 from mms.cost_curves import DEFAULT_COST_TIME_UNIT, audit_thermal_cost_curves
+from mms.penalties import audit_penalty_hierarchy
 
 
 REQUIRED_TOP_LEVEL_KEYS = {
@@ -186,6 +187,14 @@ def validate_input_data(input_data):
             f"Thermal cost curve audit {issue.get('code')} for "
             f"Generating_Units[{issue.get('unit_index')}]: {issue.get('message')}"
         )
+        if issue.get("severity") == "error":
+            errors.append(message)
+        elif issue.get("severity") == "warning":
+            warnings.append(message)
+
+    penalty_audit = audit_penalty_hierarchy(input_data)
+    for issue in penalty_audit.get("issues", []):
+        message = f"Penalty hierarchy audit {issue.get('code')}: {issue.get('message')}"
         if issue.get("severity") == "error":
             errors.append(message)
         elif issue.get("severity") == "warning":

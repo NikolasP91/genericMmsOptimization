@@ -4,7 +4,12 @@ import unittest
 import pulp as pl
 
 from input_validation import validate_input_data
-from mms.cost_curves import audit_thermal_cost_curves, build_thermal_cost_report
+from mms.cost_curves import (
+    audit_thermal_cost_curves,
+    build_thermal_cost_report,
+    generate_pwl_from_quadratic,
+    prepare_thermal_cost_curves,
+)
 from mms.model.thermal_constraints import create_variable_cost_curve_calculation_constraints
 
 
@@ -158,6 +163,30 @@ class ThermalCostCurveAuditTests(unittest.TestCase):
         variable_names = {variable.name for variable in prob.variables()}
         self.assertTrue(any(name.startswith("u_1") for name in variable_names))
         self.assertEqual(1, len(u_1[0][1]))
+
+    def test_quadratic_coefficients_generate_secant_pwl_curve(self):
+        data = _base_input()
+        unit = data["Generating_Units"][0]
+        unit.pop("var_gen_cost(euro/MW)")
+        unit["quadratic_cost_coefficients"] = {"a": 1.0, "b": 2.0, "c": 3.0}
+        unit["cost_curve_generation"] = {"segments": 2}
+
+        generated = generate_pwl_from_quadratic(unit, data)
+
+        self.assertEqual([[10.0, 20.0, 30.0], [123.0, 32.0, 52.0]], generated)
+
+    def test_prepare_thermal_cost_curves_populates_missing_curve(self):
+        data = _base_input()
+        unit = data["Generating_Units"][0]
+        unit.pop("var_gen_cost(euro/MW)")
+        unit["quadratic_cost_coefficients"] = {"a": 0.1, "b": 1.0, "c": 0.0}
+
+        report = prepare_thermal_cost_curves(data)
+
+        self.assertEqual("passed", report["status"])
+        self.assertEqual(1, report["generated_count"])
+        self.assertIn("var_gen_cost(euro/MW)", unit)
+        self.assertEqual("generated_from_quadratic", unit["cost_curve_source"]["type"])
 
 
 if __name__ == "__main__":

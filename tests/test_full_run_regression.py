@@ -60,7 +60,14 @@ class FullRunRegressionTests(unittest.TestCase):
             self.assertEqual("passed", output["Warning_Report"]["status"])
             self.assertEqual("passed", output["Thermal_Cost_Curve_Audit"]["status"])
             self.assertEqual(0, output["Thermal_Cost_Curve_Audit"]["warning_count"])
+            self.assertEqual("passed", output["Penalty_Hierarchy_Audit"]["status"])
+            self.assertEqual(0, output["Penalty_Hierarchy_Audit"]["warning_count"])
             self.assertAlmostEqual(91203.75, output["Thermal_Cost_Report"]["summary"]["thermal_cost"])
+            self.assertAlmostEqual(
+                solve_metadata["objective_value"],
+                sum(item["amount"] for item in output["Objective_Breakdown_Report"]["components"]),
+                delta=1e-3,
+            )
             self.assertGreater(output["Performance_Profile"]["total_seconds"], 0)
             self.assertIn("pipeline", output["Performance_Profile"])
 
@@ -74,7 +81,10 @@ class FullRunRegressionTests(unittest.TestCase):
                 "reserve_monitoring_report.json",
                 "res_curtailment_report.json",
                 "thermal_cost_curve_audit.json",
+                "thermal_cost_curve_generation.json",
                 "thermal_cost_report.json",
+                "penalty_hierarchy_audit.json",
+                "objective_breakdown_report.json",
                 "warning_report.json",
                 "diagnostics_report.json",
                 "performance_profile.json",

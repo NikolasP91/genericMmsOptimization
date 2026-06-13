@@ -113,6 +113,13 @@
           2.65
         ]
       ],
+      "cost_curve_source": {
+        "type": "manual_pwl",
+        "reference": "Project biomass test-case thermal cost assumptions",
+        "currency": "EUR",
+        "basis": "euro_per_mw_per_minute",
+        "method": "incremental_breakpoints_and_marginal_slopes"
+      },
       "start_up_cost(euro)": 1600,
       "shut_down_cost(euro)": 900,
       "state": 1,
@@ -315,6 +322,13 @@
           10.6
         ]
       ],
+      "cost_curve_source": {
+        "type": "manual_pwl",
+        "reference": "Project biomass test-case thermal cost assumptions",
+        "currency": "EUR",
+        "basis": "euro_per_mw_per_minute",
+        "method": "incremental_breakpoints_and_marginal_slopes"
+      },
       "start_up_cost(euro)": 1200,
       "shut_down_cost(euro)": 600,
       "state": 1,

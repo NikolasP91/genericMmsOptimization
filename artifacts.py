@@ -43,8 +43,14 @@ def write_run_artifacts(
             write_json(artifact_dir / "res_curtailment_report.json", output_data["RES_Curtailment_Report"])
         if "Thermal_Cost_Curve_Audit" in output_data:
             write_json(artifact_dir / "thermal_cost_curve_audit.json", output_data["Thermal_Cost_Curve_Audit"])
+        if "Thermal_Cost_Curve_Generation" in output_data:
+            write_json(artifact_dir / "thermal_cost_curve_generation.json", output_data["Thermal_Cost_Curve_Generation"])
         if "Thermal_Cost_Report" in output_data:
             write_json(artifact_dir / "thermal_cost_report.json", output_data["Thermal_Cost_Report"])
+        if "Penalty_Hierarchy_Audit" in output_data:
+            write_json(artifact_dir / "penalty_hierarchy_audit.json", output_data["Penalty_Hierarchy_Audit"])
+        if "Objective_Breakdown_Report" in output_data:
+            write_json(artifact_dir / "objective_breakdown_report.json", output_data["Objective_Breakdown_Report"])
         if "Warning_Report" in output_data:
             write_json(artifact_dir / "warning_report.json", output_data["Warning_Report"])
         if "Diagnostics_Report" in output_data:

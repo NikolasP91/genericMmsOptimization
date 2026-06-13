@@ -1,6 +1,9 @@
 THERMAL_PREFIX = "Therm"
 COST_CURVE_FIELD = "var_gen_cost(euro/MW)"
+QUADRATIC_COST_FIELD = "quadratic_cost_coefficients"
+LEGACY_QUADRATIC_COST_FIELD = "quadratic_cost(euro)"
 DEFAULT_COST_TIME_UNIT = "euro_per_mw_per_minute"
+DEFAULT_QUADRATIC_SEGMENTS = 3
 
 
 def _is_number(value):
@@ -65,6 +68,178 @@ def _cost_at_breakpoints(base_cost, segment_slopes, segment_widths):
         running_cost += slope * width
         costs.append(running_cost)
     return [round(value, 6) for value in costs]
+
+
+def _quadratic_coefficients(unit):
+    coefficients = unit.get(QUADRATIC_COST_FIELD) or unit.get(LEGACY_QUADRATIC_COST_FIELD)
+    if not isinstance(coefficients, dict):
+        return None
+    if not all(_is_number(coefficients.get(key)) for key in ("a", "b", "c")):
+        return None
+    return {
+        "a": float(coefficients["a"]),
+        "b": float(coefficients["b"]),
+        "c": float(coefficients["c"]),
+    }
+
+
+def _quadratic_cost(coefficients, power):
+    return coefficients["a"] * power * power + coefficients["b"] * power + coefficients["c"]
+
+
+def _generation_config(input_data, unit):
+    global_config = input_data.get("optimization_parameters", {}).get(
+        "thermal_cost_curve_generation", {}
+    )
+    unit_config = unit.get("cost_curve_generation", {})
+    config = {}
+    if isinstance(global_config, dict):
+        config.update(global_config)
+    if isinstance(unit_config, dict):
+        config.update(unit_config)
+    return config
+
+
+def _generated_breakpoints(unit, config):
+    explicit_breakpoints = config.get("breakpoints")
+    numeric_breakpoints = _numeric_list(explicit_breakpoints)
+    if numeric_breakpoints and len(numeric_breakpoints) >= 2:
+        return numeric_breakpoints
+
+    min_power = _max_positive(unit.get("min_power(MW)"))
+    max_power = _max_positive(unit.get("max_power(MW)"))
+    if max_power <= min_power:
+        return []
+
+    segment_count = config.get("segments", DEFAULT_QUADRATIC_SEGMENTS)
+    if not isinstance(segment_count, int) or isinstance(segment_count, bool):
+        return []
+    if segment_count < 1:
+        return []
+
+    width = (max_power - min_power) / segment_count
+    return [min_power + width * index for index in range(segment_count)] + [max_power]
+
+
+def generate_pwl_from_quadratic(unit, input_data=None):
+    """Generate [breakpoints, base + secant slopes] from a quadratic cost curve."""
+
+    input_data = input_data or {}
+    coefficients = _quadratic_coefficients(unit)
+    if coefficients is None:
+        return None
+
+    breakpoints = _generated_breakpoints(unit, _generation_config(input_data, unit))
+    if len(breakpoints) < 2:
+        return None
+
+    slopes = []
+    for left, right in zip(breakpoints, breakpoints[1:]):
+        width = right - left
+        if width <= 0:
+            return None
+        slopes.append((_quadratic_cost(coefficients, right) - _quadratic_cost(coefficients, left)) / width)
+
+    base_cost = _quadratic_cost(coefficients, breakpoints[0])
+    return [
+        [round(value, 6) for value in breakpoints],
+        [round(base_cost, 6)] + [round(value, 6) for value in slopes],
+    ]
+
+
+def prepare_thermal_cost_curves(input_data):
+    """Populate missing/generated thermal PWL curves from quadratic coefficients."""
+
+    generation_report = {
+        "report_type": "thermal_cost_curve_generation",
+        "status": "passed",
+        "generated_count": 0,
+        "skipped_count": 0,
+        "issue_count": 0,
+        "warning_count": 0,
+        "error_count": 0,
+        "issues": [],
+        "units": [],
+    }
+    global_config = input_data.get("optimization_parameters", {}).get(
+        "thermal_cost_curve_generation", {}
+    )
+    enabled = True
+    replace_existing_default = False
+    if isinstance(global_config, dict):
+        enabled = global_config.get("enabled", True)
+        replace_existing_default = global_config.get("replace_existing", False)
+    if not enabled:
+        generation_report["status"] = "skipped"
+        return generation_report
+
+    for unit_index, unit in enumerate(input_data.get("Generating_Units", [])):
+        comments = unit.get("comments", "")
+        if not isinstance(comments, str) or not comments.startswith(THERMAL_PREFIX):
+            continue
+
+        unit_config = unit.get("cost_curve_generation", {})
+        if isinstance(unit_config, dict) and unit_config.get("enabled") is False:
+            generation_report["skipped_count"] += 1
+            continue
+
+        replace_existing = replace_existing_default
+        if isinstance(unit_config, dict):
+            replace_existing = unit_config.get("replace_existing", replace_existing)
+
+        existing_curve = unit.get(COST_CURVE_FIELD)
+        if existing_curve is not None and not replace_existing:
+            generation_report["skipped_count"] += 1
+            continue
+
+        generated_curve = generate_pwl_from_quadratic(unit, input_data)
+        if generated_curve is None:
+            if _quadratic_coefficients(unit) is not None:
+                _add_issue(
+                    generation_report["issues"],
+                    "warning",
+                    "quadratic_curve_generation_failed",
+                    "Thermal PWL curve could not be generated from quadratic coefficients.",
+                    unit_index,
+                    unit.get("gen_id", unit_index),
+                )
+            generation_report["skipped_count"] += 1
+            continue
+
+        unit[COST_CURVE_FIELD] = generated_curve
+        unit.setdefault(
+            "cost_curve_source",
+            {
+                "type": "generated_from_quadratic",
+                "reference": QUADRATIC_COST_FIELD,
+                "currency": "EUR",
+                "basis": input_data.get("optimization_parameters", {}).get(
+                    "cost_curve_time_unit", DEFAULT_COST_TIME_UNIT
+                ),
+                "method": "secant_slopes_between_breakpoints",
+            },
+        )
+        generation_report["generated_count"] += 1
+        generation_report["units"].append(
+            {
+                "unit_index": unit_index,
+                "gen_id": unit.get("gen_id", unit_index),
+                "breakpoints_mw": generated_curve[0],
+                "coefficients": generated_curve[1],
+                "source": unit.get("cost_curve_source"),
+            }
+        )
+
+    if generation_report["issues"]:
+        generation_report["status"] = _report_status(generation_report["issues"])
+    generation_report["issue_count"] = len(generation_report["issues"])
+    generation_report["warning_count"] = len(
+        [issue for issue in generation_report["issues"] if issue["severity"] == "warning"]
+    )
+    generation_report["error_count"] = len(
+        [issue for issue in generation_report["issues"] if issue["severity"] == "error"]
+    )
+    return generation_report
 
 
 def is_non_decreasing(values, tolerance=1e-6):
@@ -247,6 +422,8 @@ def audit_thermal_cost_curves(input_data, tolerance=1e-6):
             "field": _unit_path(unit_index),
             "formulation": "incremental_piecewise_linear",
             "recommended_model": None,
+            "cost_curve_source": unit.get("cost_curve_source"),
+            "cost_curve_source_present": isinstance(unit.get("cost_curve_source"), dict),
             "quadratic_source_coefficients_present": False,
             "quadratic_source_verified": False,
             "breakpoints_mw": [],
@@ -256,13 +433,9 @@ def audit_thermal_cost_curves(input_data, tolerance=1e-6):
             "cost_at_breakpoints": [],
         }
 
-        quadratic_coefficients = unit.get("quadratic_cost_coefficients") or unit.get(
-            "quadratic_cost(euro)"
-        )
-        if isinstance(quadratic_coefficients, dict):
-            unit_record["quadratic_source_coefficients_present"] = all(
-                key in quadratic_coefficients for key in ("a", "b", "c")
-            )
+        quadratic_coefficients = _quadratic_coefficients(unit)
+        if quadratic_coefficients is not None:
+            unit_record["quadratic_source_coefficients_present"] = True
 
         if not isinstance(curve, list) or len(curve) != 2:
             _add_issue(
@@ -430,6 +603,16 @@ def audit_thermal_cost_curves(input_data, tolerance=1e-6):
             unit_record["cost_at_breakpoints"] = _cost_at_breakpoints(
                 costs[0], slopes, positive_widths
             )
+            if quadratic_coefficients is not None:
+                quadratic_costs = [
+                    round(_quadratic_cost(quadratic_coefficients, point), 6)
+                    for point in breakpoints
+                ]
+                unit_record["quadratic_cost_at_breakpoints"] = quadratic_costs
+                unit_record["quadratic_source_verified"] = all(
+                    abs(left - right) <= tolerance
+                    for left, right in zip(unit_record["cost_at_breakpoints"], quadratic_costs)
+                )
             for segment_index, (left, right, slope, width) in enumerate(
                 zip(breakpoints, breakpoints[1:], slopes, positive_widths),
                 start=1,

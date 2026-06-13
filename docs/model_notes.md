@@ -70,6 +70,8 @@ The active workflow is now split across:
   violation summaries, and legacy output JSON assembly.
 - `RV_genericMmsOptimization.py`: compatibility facade for older imports only.
 - `mms/cost_curves.py`: thermal production-cost curve audit utilities.
+- `mms/penalties.py`: soft-constraint penalty hierarchy audit utilities.
+- `mms/objective.py`: post-solve objective component reconstruction.
 
 New algebra should be added to the appropriate `mms/model/` module, and new
 post-solve/output behavior should be added under `mms/postsolve.py` or
@@ -86,6 +88,7 @@ Input validation checks include:
 - Load horizon consistency.
 - Required generating-unit fields.
 - Thermal/conventional production-cost curve shape and numeric consistency.
+- Soft-constraint penalty hierarchy and numeric consistency.
 - Forecast and availability array lengths.
 - Nonnegative physical limits and reserve capacities.
 - Unique `gen_id` values, with a warning when IDs are not contiguous.
@@ -123,6 +126,7 @@ optimization failures.
 - Nonzero APR violation slack fields.
 - Reserve-monitoring shortfalls by reserve type, direction, and period.
 - Failed validation checks with their severity.
+- Thermal cost-curve generation/audit issues and penalty hierarchy issues.
 
 `Diagnostics_Report` summarizes:
 
@@ -132,6 +136,7 @@ optimization failures.
 - Maximum load-curtailment and APR slack magnitudes.
 - RES/PV curtailment totals.
 - Model size, objective, big-M value, and the slowest constraint build sections.
+- Thermal cost-curve and penalty hierarchy audit summaries.
 
 These reports are intended to make infeasible or degraded runs auditable without
 requiring manual parsing of the console log.
@@ -169,9 +174,32 @@ The implementation chooses the formulation from the supplied slopes:
 
 This is a PWL representation that can approximate a quadratic fuel/cost curve
 when the input breakpoints and marginal segment costs were derived from such a
-quadratic. The code does not currently estimate breakpoints from raw quadratic
-coefficients. Instead, it audits the supplied PWL data and reports whether the
-segments look consistent with a convex quadratic approximation.
+quadratic. A thermal unit may optionally provide:
+
+```json
+"quadratic_cost_coefficients": {"a": 0.0, "b": 0.0, "c": 0.0},
+"cost_curve_generation": {"segments": 3}
+```
+
+When `var_gen_cost(euro/MW)` is missing, `main.py` can generate it before
+validation by using equal-width breakpoints from `min_power(MW)` to
+`max_power(MW)` and secant slopes between adjacent breakpoints. This preserves
+the quadratic cost exactly at the breakpoints. Existing manual PWL curves are
+left unchanged unless `replace_existing` is enabled. The generation report is
+embedded as `Thermal_Cost_Curve_Generation` and written to
+`runs/latest/thermal_cost_curve_generation.json`.
+
+Units may also provide provenance metadata:
+
+```json
+"cost_curve_source": {
+  "type": "manual_pwl",
+  "reference": "...",
+  "currency": "EUR",
+  "basis": "euro_per_mw_per_minute",
+  "method": "incremental_breakpoints_and_marginal_slopes"
+}
+```
 
 `Thermal_Cost_Curve_Audit` checks:
 
@@ -193,6 +221,41 @@ The audit is embedded in `optimization_output.json` and written separately as
 `Thermal_Cost_Report` reconstructs the solved base cost, segment dispatch,
 segment cost, total thermal cost, and any unpriced MW by unit and period. It is
 written separately as `runs/latest/thermal_cost_report.json`.
+
+## Penalty And Objective Audits
+
+`Penalty_Hierarchy_Audit` checks the soft-constraint penalty weights in
+`Cost_parameters`. It verifies that active penalty coefficients are positive and
+that the intended priority order is not inverted, for example:
+
+- load-balance slack should not be cheaper than reserve-shortfall slack;
+- primary reserve shortfall should not be cheaper than secondary or tertiary
+  reserve shortfall in the same direction;
+- operational feasibility slacks such as ramp, forbidden-zone, OOS/testing, and
+  grid-capacity relaxations should be priced at least as strongly as the
+  strongest reserve shortfall;
+- RES/PV forecast-deviation penalties should not make load slack attractive.
+
+The audit allows asymmetric upward/downward reserve penalties, because that can
+be a deliberate operational choice.
+
+`Objective_Breakdown_Report` reconstructs observable objective components from
+the solved output:
+
+- thermal variable cost;
+- startup, shutdown, online commitment, and operating-state costs;
+- reserve capacity costs and reserve-shortfall penalties;
+- load-curtailment penalties;
+- RES/PV tracking penalties and setpoint reward terms.
+
+The post-solve JSON exports `Setpoints` for both RES and PV units when RES/PV
+dispatch variables are active, because the objective reward term is applied to
+both `RES_SP` and `PV_SP` units in the MIP.
+
+Some relaxation slacks are not currently exported by post-solve processing, so
+the report includes an `unreconstructed_or_rounding_residual` component equal to
+the solver objective minus reconstructed components. This makes hidden or
+non-exported objective mass visible instead of silently losing it.
 
 Cost-curve time scaling is explicit through
 `optimization_parameters.cost_curve_time_unit`:
@@ -289,7 +352,10 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `reserve_monitoring_report.json`
 - `res_curtailment_report.json`
 - `thermal_cost_curve_audit.json`
+- `thermal_cost_curve_generation.json`
 - `thermal_cost_report.json`
+- `penalty_hierarchy_audit.json`
+- `objective_breakdown_report.json`
 - `warning_report.json`
 - `diagnostics_report.json`
 - `performance_profile.json`
@@ -312,8 +378,13 @@ The output JSON includes:
 - `Thermal_Cost_Curve_Audit`: thermal PWL cost-curve structure, segment slopes,
   cost-at-breakpoint reconstruction, and warnings/errors for nonconvex or
   malformed curves.
+- `Thermal_Cost_Curve_Generation`: generated PWL curves derived from optional
+  quadratic coefficients.
 - `Thermal_Cost_Report`: solved thermal base cost, segment dispatch, segment
   cost, total cost, and unpriced MW by unit and period.
+- `Penalty_Hierarchy_Audit`: soft-constraint penalty priority checks.
+- `Objective_Breakdown_Report`: reconstructed objective components and residual
+  against the solver objective.
 - `Performance_Profile`: total runtime plus stage timings for input loading,
   validation, model build/solve, post-solve reports, diagnostics, output, and
   artifact writing.

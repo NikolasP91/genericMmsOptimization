@@ -828,7 +828,7 @@ def solution_processing(solution, input_data):
         s_power_plus_df, s_power_minus_df, N_1_df, N_2_df, P_RES_df, P_PV_df, s_avail_values_df, s_N_1_df, s_N_2_df, P_sp_df, g5_df, delta_df, s_power_OOS_less_plus_df, s_power_OOS_more_minus_df
     )  # y_up_df, y_down_df,
 
-def setpoint_calculation(input_data, RES, RES_forecast, Sum_RES_forecast, data, power_df, setpoint_df, state_df):
+def setpoint_calculation(input_data, RES, PV, RES_forecast, Sum_RES_forecast, data, power_df, setpoint_df, state_df):
     if input_data["constraints"]["res_pv_dispatch_variables_constraints"]:
 
         num_rows = len(RES_forecast)
@@ -871,7 +871,7 @@ def setpoint_calculation(input_data, RES, RES_forecast, Sum_RES_forecast, data, 
         #     for j in Setpoints_df.columns:
         #         print(Setpoints_df.loc[i][j])
 
-        for row_labels in RES:
+        for row_labels in RES + PV:
             for col in range(len(RES_forecast)):
                 # if y_res_1_df.iloc[col][1] == 1:
                 #     Setpoints_df.iloc[row_labels, col] = Grid_Capacity_df.iloc[col][1] * (
@@ -1579,7 +1579,7 @@ def output_json(data, input_data, json_template, power_df, Setpoints_df, unit_th
         Unit_thermal_states_temp = [[round(value, 3) for value in row] for row in unit_thermal_states_dfs[i + 1].values]
         data_output["Generating_Units"][i]["Operating-states"] = Unit_thermal_states_temp
 
-        if i in RES:
+        if i in RES + PV:
             if input_data["constraints"]["res_pv_dispatch_variables_constraints"]:
                 data_output["Generating_Units"][i]['Setpoints'] = Units_Setpoints[i]
             else:
@@ -1605,7 +1605,8 @@ def create_output_json_template(data, CONV, RES, PV, Partially_Controllable):
                                   'Secondary_Active_Power_Reserves(MW)': [0, 0],
                                   'Tertiary_Active_Power_Reserves(MW)': [0, 0],
                                   'State': [0.0, 0.0, 0.0, 0.0],
-                                  'Power': [0.0, 0.0, 0.0, 0.0]})
+                                  'Power': [0.0, 0.0, 0.0, 0.0],
+                                  'Setpoints': [0.0, 0.0, 0.0, 0.0]})
         elif i in RES:
             json_template.append({'gen_id': 0,
                                   'comments': 'Wind Turbine Generating Unit 000',

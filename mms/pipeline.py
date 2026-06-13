@@ -158,7 +158,7 @@ def parse_and_execute_optimization(input_data):
     s_power_testing_mode_plus_df, s_power_testing_mode_minus_df,
     s_power_plus_df, s_power_minus_df, N_1_df, N_2_df, P_RES_df, P_PV_df, s_avail_values_df, s_N_1_df, s_N_2_df, P_sp_df, g5_df, delta_df,
     s_power_OOS_less_plus_df, s_power_OOS_more_minus_df) = solution_processing(solution, input_data)
-    Setpoints_df = setpoint_calculation(input_data, RES, RES_forecast, Sum_RES_forecast, data, power_df, setpoint_df, state_df)
+    Setpoints_df = setpoint_calculation(input_data, RES, PV, RES_forecast, Sum_RES_forecast, data, power_df, setpoint_df, state_df)
     unit_matrices = units_matrices(u_2_df, data)
     unit_thermal_states_dfs = matrices_to_dfs(unit_matrices)
     LC = load_curtailment(input_data, s_load_plus_df, s_load_minus_df)

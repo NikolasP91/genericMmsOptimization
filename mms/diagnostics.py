@@ -99,6 +99,20 @@ def build_warning_report(input_data, output_data, validation_report=None, tolera
             segment_index=issue.get("segment_index"),
         )
 
+    for report_name, prefix in (
+        ("Thermal_Cost_Curve_Generation", "thermal_cost_curve_generation"),
+        ("Penalty_Hierarchy_Audit", "penalty_hierarchy"),
+    ):
+        for issue in output_data.get(report_name, {}).get("issues", []):
+            if issue.get("severity") not in ("warning", "error"):
+                continue
+            _add_warning(
+                warnings,
+                f"{prefix}_{issue.get('code', 'issue')}",
+                issue.get("message", "Run audit issue."),
+                severity=issue.get("severity", "warning"),
+            )
+
     if validation_report:
         for check in validation_report.get("checks", []):
             if check.get("status") == "failed":
@@ -160,6 +174,22 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
                 "gen_id": issue.get("gen_id"),
             }
         )
+
+    for report_name, stage_name in (
+        ("Thermal_Cost_Curve_Generation", "thermal_cost_curve_generation"),
+        ("Penalty_Hierarchy_Audit", "penalty_hierarchy_audit"),
+    ):
+        for issue in output_data.get(report_name, {}).get("issues", []):
+            if issue.get("severity") != "error":
+                continue
+            issue_records.append(
+                {
+                    "stage": stage_name,
+                    "severity": "error",
+                    "name": issue.get("code"),
+                    "message": issue.get("message"),
+                }
+            )
 
     for check in validation_report.get("checks", []):
         if check.get("status") == "failed":
@@ -237,6 +267,12 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
             "issue_count": cost_curve_audit.get("issue_count", 0),
             "warning_count": cost_curve_audit.get("warning_count", 0),
             "error_count": cost_curve_audit.get("error_count", 0),
+        },
+        "penalty_hierarchy_summary": {
+            "status": output_data.get("Penalty_Hierarchy_Audit", {}).get("status"),
+            "issue_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("issue_count", 0),
+            "warning_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("warning_count", 0),
+            "error_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("error_count", 0),
         },
         "slowest_constraint_sections": bottleneck_sections,
     }

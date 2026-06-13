@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pulp as pl
 
+from mms.model.bounds import res_pv_dispatch_bounds, res_pv_unit_dispatch_bounds
+
 
 def create_res_pv_dispatch_variables_constraints(prob, objective_terms, input_data, power, state, data, intervals, UNITS, CONV, RES, PV, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, Load_forecast,
                                                  RES_forecast, RES_sum, M, s_power_minus):
@@ -131,37 +133,45 @@ def create_res_pv_2_dispatch_variables_constraints(prob, objective_terms, input_
 
 
     for t in intervals[1:]:
+        dispatch_bounds = res_pv_dispatch_bounds(
+            input_data, data, CONV, RES_SP, PV_SP, RES_no_SP, PV_no_SP, Load_forecast, t
+        )
+        s_Grid_Capacity_2[t].upBound = dispatch_bounds["grid_capacity2_slack_upper"]
+        grid_capacity2_m = dispatch_bounds["grid_capacity2_big_m"]
+        grid_capacity1_m = dispatch_bounds["grid_capacity1_big_m"]
+        positive_part_m = dispatch_bounds["positive_part_big_m"]
+
         prob += Grid_Capacity2[t] == input_data["Other_coefficients"]["x_res_pv_dynamic"] * Load_forecast[t]  #pl.lpSum(power[i][t] for i in UNITS)
         # prob += Grid_Capacity1[t] == pl.lpSum(power[i][t] for i in UNITS) - pl.lpSum(data[i]['min_power(MW)'][t-1] * state[i][t] for i in CONV)  #+0.003 # P_TEt Load_forecast[t] not including PV_power
         prob += Grid_Capacity1[t] == Load_forecast[t] - pl.lpSum(data[i]['min_power(MW)'][t - 1] * state[i][t] for i in CONV) - input_data["Other_coefficients"]["include_PV"] * pl.lpSum(power[j][t] for j in RES_no_SP + PV_no_SP)
         prob += Grid_Capacity3[t] == pl.lpSum(data[i]['availability'][t-1] for i in RES_SP) + (input_data["Other_coefficients"]["PV_Participation_coefficient"]/100) * pl.lpSum(data[i]['availability'][t-1] for i in PV_SP)  #+ pl.lpSum(data[i]['availability'][t-1] for i in PV_no_SP)  ###### από όσες RES+PV είναι διαθέσιμες
         ###############
-        prob += Grid_Capacity3[t] - (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) <= M * g2[t] * 10  # multiplication by 1000 is used to make sure M*1000 > Grid_Capacity2 when no min-max constraints are applied
-        prob += (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) - Grid_Capacity3[t] <= M * (1 - g2[t]) * 10
-        prob += Min_grid_capacity_2[t] - (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) <= M * (1 - g2[t]) * 10  # "a_equals_b_if_g_is_1"
-        prob += Min_grid_capacity_2[t] - (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) >= -M * (1 - g2[t]) * 10  # "a_equals_b_if_g_is_1_neg"
-        prob += Min_grid_capacity_2[t] - Grid_Capacity3[t] <= M * g2[t] * 10   # "a_equals_c_if_g_is_0"
-        prob += Min_grid_capacity_2[t] - Grid_Capacity3[t] >= -M * g2[t] * 10  # "a_equals_c_if_g_is_0_neg"
+        prob += Grid_Capacity3[t] - (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) <= grid_capacity2_m * g2[t]
+        prob += (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) - Grid_Capacity3[t] <= grid_capacity2_m * (1 - g2[t])
+        prob += Min_grid_capacity_2[t] - (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) <= grid_capacity2_m * (1 - g2[t])  # "a_equals_b_if_g_is_1"
+        prob += Min_grid_capacity_2[t] - (Grid_Capacity2[t] + s_Grid_Capacity_2[t]) >= -grid_capacity2_m * (1 - g2[t])  # "a_equals_b_if_g_is_1_neg"
+        prob += Min_grid_capacity_2[t] - Grid_Capacity3[t] <= grid_capacity2_m * g2[t]   # "a_equals_c_if_g_is_0"
+        prob += Min_grid_capacity_2[t] - Grid_Capacity3[t] >= -grid_capacity2_m * g2[t]  # "a_equals_c_if_g_is_0_neg"
         ################
         #
         # prob += RES_sum[t] <= Grid_Capacity1[t] + s_Grid_Capacity_1[t]  # the actual power we expect the res + pv units to produce
         # prob += RES_sum[t] <= Grid_Capacity2[t] + s_Grid_Capacity_2[t]
         # prob += RES_sum[t] <= Grid_Capacity3[t] + s_Grid_Capacity_3[t]
         #
-        prob += Grid_Capacity1[t] - Min_grid_capacity_2[t] <= M * g1[t] * 10  # multiplication by 1000 is used to make sure M*1000 > Grid_Capacity2 when no min-max constraints are applied
-        prob += Min_grid_capacity_2[t] - Grid_Capacity1[t] <= M * (1 - g1[t]) * 10
-        prob += Min_grid_capacity_1[t] - Min_grid_capacity_2[t] <= M * (1 - g1[t]) * 10  # "a_equals_b_if_g_is_1"
-        prob += Min_grid_capacity_1[t] - Min_grid_capacity_2[t] >= -M * (1 - g1[t]) * 10  # "a_equals_b_if_g_is_1_neg"
-        prob += Min_grid_capacity_1[t] - Grid_Capacity1[t] <= M * g1[t] * 10  # "a_equals_c_if_g_is_0"
-        prob += Min_grid_capacity_1[t] - Grid_Capacity1[t] >= -M * g1[t] * 10  # "a_equals_c_if_g_is_0_neg"
+        prob += Grid_Capacity1[t] - Min_grid_capacity_2[t] <= grid_capacity1_m * g1[t]
+        prob += Min_grid_capacity_2[t] - Grid_Capacity1[t] <= grid_capacity1_m * (1 - g1[t])
+        prob += Min_grid_capacity_1[t] - Min_grid_capacity_2[t] <= grid_capacity1_m * (1 - g1[t])  # "a_equals_b_if_g_is_1"
+        prob += Min_grid_capacity_1[t] - Min_grid_capacity_2[t] >= -grid_capacity1_m * (1 - g1[t])  # "a_equals_b_if_g_is_1_neg"
+        prob += Min_grid_capacity_1[t] - Grid_Capacity1[t] <= grid_capacity1_m * g1[t]  # "a_equals_c_if_g_is_0"
+        prob += Min_grid_capacity_1[t] - Grid_Capacity1[t] >= -grid_capacity1_m * g1[t]  # "a_equals_c_if_g_is_0_neg"
         # prob += pl.lpSum(state[i][t] * data[i]["min_power(MW)"] for i in RES) <= Min_grid_capacity_1[t] - pl.lpSum(power[j][t] for j in PV)  # for wind parks από όσες RES είναι διαθέσιμες (και έχουν ισχύ > min - όχι η παρένθεση)
 
         # max(Min_grid_capacity_1[t], 0)
         prob += P_sp_1[t] >= Min_grid_capacity_1[t]
         prob += P_sp_1[t] >= 0
-        prob += P_sp_1[t] <= Min_grid_capacity_1[t] + M * (1 - g5[t])
-        prob += P_sp_1[t] <= M * g5[t]
-        prob += Min_grid_capacity_1[t] <= M * g5[t]
+        prob += P_sp_1[t] <= Min_grid_capacity_1[t] + positive_part_m * (1 - g5[t])
+        prob += P_sp_1[t] <= positive_part_m * g5[t]
+        prob += Min_grid_capacity_1[t] <= positive_part_m * g5[t]
 
         prob += P_sp[t] <= P_sp_1[t]
 
@@ -193,23 +203,27 @@ def create_res_pv_2_dispatch_variables_constraints(prob, objective_terms, input_
 
 
         for i in RES_SP + PV_SP:
+            unit_bounds = res_pv_unit_dispatch_bounds(data[i], RES_forecast[t - 1][i], t - 1, M)
+            s_power_minus[i][t].upBound = unit_bounds["s_power_minus_upper"]
+            setpoint_forecast_m = unit_bounds["setpoint_forecast_big_m"]
+            power_m = unit_bounds["power_big_m"]
             # prob += power[i][t] <= RES_forecast[t - 1][i]  # * state[i][t]
             prob += power[i][t] <= setpoint[i][t] * data[i]['availability'][t-1]
             # prob += setpoint[i][t] * data[i]['max_power(MW)'] <= data[i]['min_power(MW)'] + M * state[i][t]  # να προσθέσω ένα -ε στο δεύτερο μέλος--- μόνο για τις διαθέσιμες RES
             ##########    Calculate the minimum between RES_forecast[t - 1][i] and setpoint[i][t] * data[i]['max_power(MW)']
-            prob += (RES_forecast[t - 1][i] + s_power_minus[i][t]) - setpoint[i][t] * data[i]['availability'][t-1] <= M * g3[i][t] * 10
-            prob += setpoint[i][t] * data[i]['availability'][t-1] - (RES_forecast[t - 1][i] + s_power_minus[i][t]) <= M * (1 - g3[i][t]) * 10
-            prob += Min_Power_Calc[i][t] - setpoint[i][t] * data[i]['availability'][t-1] <= M * (1 - g3[i][t]) * 10  # "a_equals_b_if_g_is_1"
-            prob += Min_Power_Calc[i][t] - setpoint[i][t] * data[i]['availability'][t-1] >= -M * (1 - g3[i][t]) * 10  # "a_equals_b_if_g_is_1_neg"
-            prob += Min_Power_Calc[i][t] - (RES_forecast[t - 1][i] + s_power_minus[i][t]) <= M * g3[i][t] * 10  # "a_equals_c_if_g_is_0"
-            prob += Min_Power_Calc[i][t] - (RES_forecast[t - 1][i] + s_power_minus[i][t]) >= -M * g3[i][t] * 10  # "a_equals_c_if_g_is_0_neg"
+            prob += (RES_forecast[t - 1][i] + s_power_minus[i][t]) - setpoint[i][t] * data[i]['availability'][t-1] <= setpoint_forecast_m * g3[i][t]
+            prob += setpoint[i][t] * data[i]['availability'][t-1] - (RES_forecast[t - 1][i] + s_power_minus[i][t]) <= setpoint_forecast_m * (1 - g3[i][t])
+            prob += Min_Power_Calc[i][t] - setpoint[i][t] * data[i]['availability'][t-1] <= setpoint_forecast_m * (1 - g3[i][t])  # "a_equals_b_if_g_is_1"
+            prob += Min_Power_Calc[i][t] - setpoint[i][t] * data[i]['availability'][t-1] >= -setpoint_forecast_m * (1 - g3[i][t])  # "a_equals_b_if_g_is_1_neg"
+            prob += Min_Power_Calc[i][t] - (RES_forecast[t - 1][i] + s_power_minus[i][t]) <= setpoint_forecast_m * g3[i][t]  # "a_equals_c_if_g_is_0"
+            prob += Min_Power_Calc[i][t] - (RES_forecast[t - 1][i] + s_power_minus[i][t]) >= -setpoint_forecast_m * g3[i][t]  # "a_equals_c_if_g_is_0_neg"
             # calculate the power of RES with setpoint based on the setpoint and the respective forecast
             # "if Min_Power_Calc[i][t] < data[i]['min_power(MW)'] then power[i][t] = 0, else power[i][t] = Min_Power_Calc[i][t]"
-            prob += Min_Power_Calc[i][t] - data[i]['min_power(MW)'][t-1] <= M * g4[i][t] * 10
-            prob += data[i]['min_power(MW)'][t-1] - Min_Power_Calc[i][t] <= M * (1 - g4[i][t]) * 10
-            prob += power[i][t] <= M * g4[i][t] * 10
-            prob += power[i][t] >= Min_Power_Calc[i][t] - M * (1 - g4[i][t]) * 10
-            prob += power[i][t] <= Min_Power_Calc[i][t] + M * (1 - g4[i][t]) * 10
+            prob += Min_Power_Calc[i][t] - data[i]['min_power(MW)'][t-1] <= power_m * g4[i][t]
+            prob += data[i]['min_power(MW)'][t-1] - Min_Power_Calc[i][t] <= power_m * (1 - g4[i][t])
+            prob += power[i][t] <= power_m * g4[i][t]
+            prob += power[i][t] >= Min_Power_Calc[i][t] - power_m * (1 - g4[i][t])
+            prob += power[i][t] <= Min_Power_Calc[i][t] + power_m * (1 - g4[i][t])
             prob += power[i][t] >= 0
             ##########
             objective_terms += setpoint[i][t] * (-50)  # * input_data["Time_granularity"]

@@ -3,7 +3,12 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 from RV_genericMmsOptimization import define_problem_and_solve_problem as public_problem_entry
-from mms.model.bounds import forbidden_zone_big_m, reserve_activation_bound
+from mms.model.bounds import (
+    forbidden_zone_big_m,
+    res_pv_dispatch_bounds,
+    res_pv_unit_dispatch_bounds,
+    reserve_activation_bound,
+)
 from mms.model.preprocessing import filter_generating_units, round_to_best, time_granularity, unit_categories
 from mms.model.problem import define_problem_and_solve_problem
 
@@ -139,6 +144,46 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         self.assertGreaterEqual(local_m, 10)
         self.assertLess(local_m, 1000)
         self.assertEqual(5.0, forbidden_zone_big_m(unit, [8, 12], 0, 5))
+
+    def test_res_pv_dispatch_bounds_are_period_specific(self):
+        input_data = {
+            "Other_coefficients": {
+                "x_res_pv_dynamic": 1,
+                "PV_Participation_coefficient": 50,
+                "include_PV": 1,
+            }
+        }
+        data = [
+            {"min_power(MW)": [5], "availability": [30]},
+            {"availability": [20]},
+            {"availability": [10]},
+            {"availability": [4]},
+        ]
+
+        bounds = res_pv_dispatch_bounds(
+            input_data,
+            data,
+            CONV=[0],
+            RES_SP=[1],
+            PV_SP=[2],
+            RES_no_SP=[3],
+            PV_no_SP=[],
+            Load_forecast=[0, 10],
+            period=1,
+        )
+
+        self.assertEqual(15.0, bounds["grid_capacity2_slack_upper"])
+        self.assertEqual(25.0, bounds["grid_capacity2_big_m"])
+        self.assertGreaterEqual(bounds["grid_capacity1_big_m"], 25.0)
+
+    def test_res_pv_unit_dispatch_bounds_limit_forecast_slack_and_power_m(self):
+        unit = {"availability": [20], "min_power(MW)": [3]}
+
+        bounds = res_pv_unit_dispatch_bounds(unit, forecast=5, period_index=0, fallback_m=1000)
+
+        self.assertEqual(15.0, bounds["s_power_minus_upper"])
+        self.assertEqual(20.0, bounds["setpoint_forecast_big_m"])
+        self.assertEqual(20.0, bounds["power_big_m"])
 
 
 if __name__ == "__main__":

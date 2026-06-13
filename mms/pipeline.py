@@ -26,6 +26,7 @@ from mms.postsolve import (
     testing_mode_constraints_violations,
     units_matrices,
 )
+from mms.slacks import build_slack_penalty_report
 
 def parse_and_execute_optimization(input_data):
     pipeline_start = perf_counter()
@@ -165,6 +166,40 @@ def parse_and_execute_optimization(input_data):
     primary_upwards_APRV, primary_downwards_APRV, secondary_upwards_APRV, secondary_downwards_APRV, tertiary_upwards_APRV, tertiary_downwards_APRV = APRR_violation(
     input_data, s_primary_APR_upwards_df, s_primary_APR_downwards_df, s_secondary_APR_upwards_df,
     s_secondary_APR_downwards_df, s_tertiary_APR_upwards_df, s_tertiary_APR_downwards_df)
+    slack_penalty_report = build_slack_penalty_report(
+        input_data,
+        {
+            "ramp_relax": ramp_relax_df,
+            "s_load_plus": s_load_plus_df,
+            "s_load_minus": s_load_minus_df,
+            "s_primary_APR_upwards": s_primary_APR_upwards_df,
+            "s_primary_APR_downwards": s_primary_APR_downwards_df,
+            "s_secondary_APR_upwards": s_secondary_APR_upwards_df,
+            "s_secondary_APR_downwards": s_secondary_APR_downwards_df,
+            "s_tertiary_APR_upwards": s_tertiary_APR_upwards_df,
+            "s_tertiary_APR_downwards": s_tertiary_APR_downwards_df,
+            "s_Grid_Capacity_1": s_Grid_Capacity_1_df,
+            "s_Grid_Capacity_2": s_Grid_Capacity_2_df,
+            "s_Grid_Capacity_3": s_Grid_Capacity_3_df,
+            "s_forbidden_zones_plus": s_forbidden_zones_plus_df,
+            "s_forbidden_zones_minus": s_forbidden_zones_minus_df,
+            "s_must_run": s_must_run_df,
+            "s_min_a_left": s_min_a_left_df,
+            "s_min_a_1": s_min_a_1_df,
+            "s_min_b_left": s_min_b_left_df,
+            "s_min_b_1": s_min_b_1_df,
+            "s_max_b_left": s_max_b_left_df,
+            "s_max_b_1": s_max_b_1_df,
+            "s_min_state_b_left": s_min_state_b_left_df,
+            "s_min_state_b_1": s_min_state_b_1_df,
+            "s_power_testing_mode_plus": s_power_testing_mode_plus_df,
+            "s_power_testing_mode_minus": s_power_testing_mode_minus_df,
+            "s_power_plus": s_power_plus_df,
+            "s_power_minus": s_power_minus_df,
+            "s_power_OOS_less_plus": s_power_OOS_less_plus_df,
+            "s_power_OOS_more_minus": s_power_OOS_more_minus_df,
+        },
+    )
     forbidden_zones_violations(input_data, s_forbidden_zones_plus_df, s_forbidden_zones_minus_df)
     ramp_up_down_violations(input_data, ramp_relax_df)
     mustRun_violations(input_data, s_must_run_df)
@@ -189,6 +224,7 @@ def parse_and_execute_optimization(input_data):
                                    secondary_downwards_APRV,
                                    tertiary_upwards_APRV, tertiary_downwards_APRV)
     data_output_json["Solve_Metadata"] = solve_metadata
+    data_output_json["Slack_Penalty_Report"] = slack_penalty_report
 
     record_stage("postsolve_output_assembly", postsolve_start)
     data_output_json["Performance_Profile"] = {

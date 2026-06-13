@@ -50,19 +50,23 @@ class FullRunRegressionTests(unittest.TestCase):
             solve_metadata = output["Solve_Metadata"]
             self.assertEqual("Optimal", output["Solution_Status"])
             self.assertEqual("passed", output["Validation"]["status"])
-            self.assertAlmostEqual(377843.11995837, solve_metadata["objective_value"], delta=1e-3)
-            self.assertEqual(11346, solve_metadata["num_constraints"])
-            self.assertEqual(4877, solve_metadata["num_variables"])
+            self.assertAlmostEqual(401874.24962105, solve_metadata["objective_value"], delta=1e-3)
+            self.assertEqual(11448, solve_metadata["num_constraints"])
+            self.assertEqual(5333, solve_metadata["num_variables"])
             self.assertEqual(1000.0, solve_metadata["big_m"])
             self.assertGreaterEqual(solve_metadata["mps_write_seconds"], 0)
             self.assertGreaterEqual(solve_metadata["solver_seconds"], 0)
-            self.assertEqual("passed", output["Diagnostics_Report"]["status"])
-            self.assertEqual("passed", output["Warning_Report"]["status"])
+            self.assertEqual("warning", output["Diagnostics_Report"]["status"])
+            self.assertEqual("warning", output["Warning_Report"]["status"])
+            self.assertEqual(2, output["Warning_Report"]["warning_count"])
             self.assertEqual("passed", output["Thermal_Cost_Curve_Audit"]["status"])
             self.assertEqual(0, output["Thermal_Cost_Curve_Audit"]["warning_count"])
             self.assertEqual("passed", output["Penalty_Hierarchy_Audit"]["status"])
             self.assertEqual(0, output["Penalty_Hierarchy_Audit"]["warning_count"])
-            self.assertAlmostEqual(91203.75, output["Thermal_Cost_Report"]["summary"]["thermal_cost"])
+            self.assertEqual("warning", output["Slack_Penalty_Report"]["status"])
+            self.assertEqual(2, output["Slack_Penalty_Report"]["nonzero_slack_count"])
+            self.assertAlmostEqual(20000.0, output["Slack_Penalty_Report"]["total_penalty_eur"])
+            self.assertAlmostEqual(94983.252, output["Thermal_Cost_Report"]["summary"]["thermal_cost"])
             self.assertAlmostEqual(
                 solve_metadata["objective_value"],
                 sum(item["amount"] for item in output["Objective_Breakdown_Report"]["components"]),
@@ -85,6 +89,7 @@ class FullRunRegressionTests(unittest.TestCase):
                 "thermal_cost_report.json",
                 "penalty_hierarchy_audit.json",
                 "objective_breakdown_report.json",
+                "slack_penalty_report.json",
                 "warning_report.json",
                 "diagnostics_report.json",
                 "performance_profile.json",

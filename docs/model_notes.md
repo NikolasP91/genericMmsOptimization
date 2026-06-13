@@ -72,6 +72,8 @@ The active workflow is now split across:
 - `mms/cost_curves.py`: thermal production-cost curve audit utilities.
 - `mms/penalties.py`: soft-constraint penalty hierarchy audit utilities.
 - `mms/objective.py`: post-solve objective component reconstruction.
+- `mms/slacks.py`: priced soft-constraint slack normalization and penalty
+  reporting.
 
 New algebra should be added to the appropriate `mms/model/` module, and new
 post-solve/output behavior should be added under `mms/postsolve.py` or
@@ -137,6 +139,7 @@ optimization failures.
 - RES/PV curtailment totals.
 - Model size, objective, big-M value, and the slowest constraint build sections.
 - Thermal cost-curve and penalty hierarchy audit summaries.
+- Nonzero soft-constraint slack counts and their total penalty cost.
 
 These reports are intended to make infeasible or degraded runs auditable without
 requiring manual parsing of the console log.
@@ -247,15 +250,21 @@ the solved output:
 - reserve capacity costs and reserve-shortfall penalties;
 - load-curtailment penalties;
 - RES/PV tracking penalties and setpoint reward terms.
+- additional priced soft-constraint slacks from `Slack_Penalty_Report`.
 
 The post-solve JSON exports `Setpoints` for both RES and PV units when RES/PV
 dispatch variables are active, because the objective reward term is applied to
 both `RES_SP` and `PV_SP` units in the MIP.
 
-Some relaxation slacks are not currently exported by post-solve processing, so
-the report includes an `unreconstructed_or_rounding_residual` component equal to
-the solver objective minus reconstructed components. This makes hidden or
-non-exported objective mass visible instead of silently losing it.
+`Slack_Penalty_Report` exports nonzero priced soft-constraint slacks in a common
+format with slack family, source variable, unit index when applicable, period,
+slack value, penalty coefficient key, and euro contribution. It currently covers
+load, reserve-shortage, ramp, grid-capacity, forbidden-zone, must-run,
+operating-state transition, state transition, testing-mode, OOS-mode, and
+RES/PV forecast-tracking slacks. The objective report includes an
+`unreconstructed_or_rounding_residual` component equal to the solver objective
+minus reconstructed components, so any remaining hidden objective mass remains
+visible.
 
 Cost-curve time scaling is explicit through
 `optimization_parameters.cost_curve_time_unit`:
@@ -335,8 +344,13 @@ constraint-specific bounds:
   configured global big-M value.
 
 Some RES/PV setpoint-selector and reserve disjunctive constraints still use the
-global big-M because they involve endogenous relaxed quantities that need a more
-careful reformulation before tightening.
+global big-M where endogenous relaxed quantities still need a more careful
+reformulation before tightening. The active DS RES/PV dispatch path now applies
+period-specific local bounds for grid-capacity min selectors, positive-part
+setpoint capacity, RES/PV forecast/setpoint min selectors, and the
+minimum-power threshold selector. The `s_Grid_Capacity_2` and RES/PV
+`s_power_minus` relaxations also receive local upper bounds derived from the
+same physical availability/forecast limits.
 
 ## Reproducibility Artifacts
 
@@ -356,6 +370,7 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `thermal_cost_report.json`
 - `penalty_hierarchy_audit.json`
 - `objective_breakdown_report.json`
+- `slack_penalty_report.json`
 - `warning_report.json`
 - `diagnostics_report.json`
 - `performance_profile.json`
@@ -385,6 +400,8 @@ The output JSON includes:
 - `Penalty_Hierarchy_Audit`: soft-constraint penalty priority checks.
 - `Objective_Breakdown_Report`: reconstructed objective components and residual
   against the solver objective.
+- `Slack_Penalty_Report`: nonzero priced soft-constraint slacks and their euro
+  contribution by family.
 - `Performance_Profile`: total runtime plus stage timings for input loading,
   validation, model build/solve, post-solve reports, diagnostics, output, and
   artifact writing.
@@ -410,7 +427,8 @@ but it protects the full DS execution path.
 ## Research-Grade Improvements Still To Do
 
 - Continue replacing broad big-M constants with constraint-specific tight bounds
-  in remaining RES/PV setpoint-selector and reserve-disjunction constraints.
+  in remaining reserve-disjunction constraints and inactive legacy RES/PV
+  dispatch paths.
 - Add additional full optimization benchmark cases with known optimal schedules
   and objective values.
 - Add equation-level documentation for each constraint family.

@@ -249,6 +249,32 @@ def build_objective_breakdown_report(input_data, output_data):
     _add_component(components, "res_pv_tracking_penalty", res_pv_tracking_penalty)
     _add_component(components, "res_pv_setpoint_reward", res_pv_setpoint_reward)
 
+    counted_slack_families = {
+        "load_curtailment_plus",
+        "load_curtailment_minus",
+        "primary_upwards_shortage",
+        "primary_downwards_shortage",
+        "secondary_upwards_shortage",
+        "secondary_downwards_shortage",
+        "tertiary_upwards_shortage",
+        "tertiary_downwards_shortage",
+        "res_pv_power_plus",
+        "res_pv_power_minus",
+    }
+    slack_report = output_data.get("Slack_Penalty_Report", {})
+    additional_slack_penalties = sum(
+        entry.get("cost_eur", 0.0)
+        for entry in slack_report.get("entries", [])
+        if entry.get("family") not in counted_slack_families
+    )
+    _add_component(
+        components,
+        "additional_soft_constraint_penalties",
+        additional_slack_penalties,
+        source="Slack_Penalty_Report",
+        note="Excludes load, reserve-shortage, and RES/PV tracking slacks already listed above.",
+    )
+
     reconstructed_total = sum(component["amount"] for component in components)
     solver_objective = output_data.get("Solve_Metadata", {}).get("objective_value")
     residual = None
@@ -260,8 +286,8 @@ def build_objective_breakdown_report(input_data, output_data):
             residual,
             source="solver_objective_minus_reconstructed_components",
             note=(
-                "Residual includes objective terms whose source slacks are not exported "
-                "in the current output JSON, plus solver/output rounding."
+                "Residual includes solver/output rounding and any objective terms not "
+                "represented by exported reports."
             ),
         )
 
@@ -273,7 +299,7 @@ def build_objective_breakdown_report(input_data, output_data):
         "component_count": len(components),
         "components": components,
         "limitations": [
-            "Some relaxation slacks are not exported by post-solve processing, so they are captured in the residual.",
+            "Soft-constraint penalties are reconstructed from Slack_Penalty_Report where available.",
             "Components are reconstructed from rounded output values and may differ slightly from internal solver values.",
         ],
     }

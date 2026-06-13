@@ -113,6 +113,21 @@ def build_warning_report(input_data, output_data, validation_report=None, tolera
                 severity=issue.get("severity", "warning"),
             )
 
+    slack_report = output_data.get("Slack_Penalty_Report", {})
+    for entry in slack_report.get("entries", []):
+        _add_warning(
+            warnings,
+            "soft_constraint_slack",
+            f"{entry.get('family')} slack is nonzero.",
+            period=entry.get("period"),
+            unit_index=entry.get("unit_index"),
+            family=entry.get("family"),
+            variable=entry.get("variable"),
+            value=entry.get("value"),
+            penalty_key=entry.get("penalty_key"),
+            cost_eur=entry.get("cost_eur"),
+        )
+
     if validation_report:
         for check in validation_report.get("checks", []):
             if check.get("status") == "failed":
@@ -222,6 +237,13 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
         slack_summary["total_positive_res_curtailment_mwh"] = curtailment_report.get(
             "summary", {}
         ).get("curtailed_mwh", 0.0)
+    slack_penalty_report = output_data.get("Slack_Penalty_Report", {})
+    slack_summary["nonzero_soft_constraint_slack_count"] = slack_penalty_report.get(
+        "nonzero_slack_count", 0
+    )
+    slack_summary["total_soft_constraint_penalty_eur"] = slack_penalty_report.get(
+        "total_penalty_eur", 0.0
+    )
 
     bottleneck_sections = sorted(
         solve_metadata.get("constraint_sections", []),
@@ -273,6 +295,11 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
             "issue_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("issue_count", 0),
             "warning_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("warning_count", 0),
             "error_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("error_count", 0),
+        },
+        "slack_penalty_summary": {
+            "status": slack_penalty_report.get("status"),
+            "nonzero_slack_count": slack_penalty_report.get("nonzero_slack_count", 0),
+            "total_penalty_eur": slack_penalty_report.get("total_penalty_eur", 0.0),
         },
         "slowest_constraint_sections": bottleneck_sections,
     }

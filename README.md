@@ -33,6 +33,7 @@ By default the runner uses:
 - thermal cost reconstruction: `runs/latest/thermal_cost_report.json`
 - penalty hierarchy audit: `runs/latest/penalty_hierarchy_audit.json`
 - objective cost breakdown: `runs/latest/objective_breakdown_report.json`
+- soft-constraint slack penalties: `runs/latest/slack_penalty_report.json`
 - performance profile: `runs/latest/performance_profile.json`
 
 Useful options:
@@ -51,7 +52,8 @@ directory, including input hash, git commit, package versions, solver settings,
 model size, objective value, big-M value, validation results, plain text logs,
 native solver logs, structured warning/diagnostics reports, thermal cost-curve
 audit/generation results, cost-reconstruction results, penalty hierarchy audit,
-objective cost breakdown, performance timings, and structured run events.
+objective cost breakdown, soft-constraint slack penalty reports, performance
+timings, and structured run events.
 
 ## Test
 
@@ -62,9 +64,10 @@ objective cost breakdown, performance timings, and structured run events.
 The tests cover input validation, hand-checkable benchmark fixtures, output
 validation failure modes, structured diagnostics, thermal cost-curve audits and
 quadratic-to-PWL generation, penalty hierarchy audits, objective breakdown
-reconciliation, constraint-section naming, local big-M bound helpers, stable run
-metadata hashing, logging utilities, report builders, module boundaries, and a
-full biomass-case optimization regression.
+reconciliation, slack penalty reports, constraint-section naming, local big-M
+bound helpers, stable run metadata hashing, logging utilities, report builders,
+module boundaries, known-answer benchmarks, and a full biomass-case optimization
+regression.
 
 ## Notes
 

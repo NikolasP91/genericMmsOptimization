@@ -69,6 +69,7 @@ The active workflow is now split across:
 - `mms/postsolve.py`: solution-variable parsing, setpoint reconstruction,
   violation summaries, and legacy output JSON assembly.
 - `RV_genericMmsOptimization.py`: compatibility facade for older imports only.
+- `mms/cost_curves.py`: thermal production-cost curve audit utilities.
 
 New algebra should be added to the appropriate `mms/model/` module, and new
 post-solve/output behavior should be added under `mms/postsolve.py` or
@@ -84,6 +85,7 @@ Input validation checks include:
 - Required top-level JSON sections.
 - Load horizon consistency.
 - Required generating-unit fields.
+- Thermal/conventional production-cost curve shape and numeric consistency.
 - Forecast and availability array lengths.
 - Nonnegative physical limits and reserve capacities.
 - Unique `gen_id` values, with a warning when IDs are not contiguous.
@@ -134,6 +136,71 @@ optimization failures.
 These reports are intended to make infeasible or degraded runs auditable without
 requiring manual parsing of the console log.
 
+## Thermal Cost Curves
+
+Thermal/conventional units use an active incremental piecewise-linear production
+cost formulation. The current input field is:
+
+```json
+"var_gen_cost(euro/MW)": [
+  [p0, p1, p2, "..."],
+  [base_cost_at_p0, marginal_cost_segment_1, marginal_cost_segment_2, "..."]
+]
+```
+
+For an online unit, the model enforces:
+
+- dispatch equals the first breakpoint plus the sum of incremental segment
+  variables;
+- the objective includes the base cost at the first breakpoint plus marginal
+  segment costs for the dispatched increments.
+
+The implementation chooses the formulation from the supplied slopes:
+
+- If marginal segment costs are nondecreasing, the curve is convex and the model
+  uses only continuous incremental segment variables with
+  `0 <= delta_s <= segment_width_s * state`. In a cost-minimizing model, the
+  optimizer naturally fills cheaper segments first, so extra binaries are not
+  needed.
+- If marginal segment costs decrease, the curve is nonconvex and the model uses
+  ordered-fill binary variables. A later segment can be used only after all
+  previous segments are full. This preserves the intended PWL shape but is
+  computationally heavier.
+
+This is a PWL representation that can approximate a quadratic fuel/cost curve
+when the input breakpoints and marginal segment costs were derived from such a
+quadratic. The code does not currently estimate breakpoints from raw quadratic
+coefficients. Instead, it audits the supplied PWL data and reports whether the
+segments look consistent with a convex quadratic approximation.
+
+`Thermal_Cost_Curve_Audit` checks:
+
+- every thermal unit has numeric `[breakpoints, coefficients]` data;
+- breakpoint and coefficient lengths match;
+- breakpoints are strictly increasing;
+- coefficients are nonnegative;
+- marginal segment costs are nondecreasing, as expected for a convex quadratic
+  cost approximation;
+- the first breakpoint matches minimum power and the last breakpoint covers the
+  declared/available dispatch capacity.
+
+The audit is embedded in `optimization_output.json` and written separately as
+`runs/latest/thermal_cost_curve_audit.json`.
+
+`Thermal_Cost_Report` reconstructs the solved base cost, segment dispatch,
+segment cost, total thermal cost, and any unpriced MW by unit and period. It is
+written separately as `runs/latest/thermal_cost_report.json`.
+
+Cost-curve time scaling is explicit through
+`optimization_parameters.cost_curve_time_unit`:
+
+- `euro_per_mw_per_minute`: legacy/current project convention, multiplying by
+  `Time_granularity`;
+- `euro_per_mwh`: academic market-style convention, multiplying by
+  `Time_granularity / 60`;
+- `euro_per_dispatch_period`: coefficients already apply to one dispatch
+  period.
+
 Run the validation unit tests with:
 
 ```powershell
@@ -149,6 +216,7 @@ The JSON file supports:
   "solver": "highs",
   "require_optimal": true,
   "big_m": "auto",
+  "cost_curve_time_unit": "euro_per_mw_per_minute",
   "highs_options": {
     "user_objective_scale": -4
   },
@@ -217,6 +285,8 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `dispatch_instructions.json`
 - `reserve_monitoring_report.json`
 - `res_curtailment_report.json`
+- `thermal_cost_curve_audit.json`
+- `thermal_cost_report.json`
 - `warning_report.json`
 - `diagnostics_report.json`
 - `performance_profile.json`
@@ -236,6 +306,11 @@ The output JSON includes:
   `RES_Curtailment_Report`: MMS-style DS evidence derived from the solved
   schedule. These are also written as separate artifacts under `runs/latest`.
 - `Warning_Report` and `Diagnostics_Report`: structured run health evidence.
+- `Thermal_Cost_Curve_Audit`: thermal PWL cost-curve structure, segment slopes,
+  cost-at-breakpoint reconstruction, and warnings/errors for nonconvex or
+  malformed curves.
+- `Thermal_Cost_Report`: solved thermal base cost, segment dispatch, segment
+  cost, total cost, and unpriced MW by unit and period.
 - `Performance_Profile`: total runtime plus stage timings for input loading,
   validation, model build/solve, post-solve reports, diagnostics, output, and
   artifact writing.

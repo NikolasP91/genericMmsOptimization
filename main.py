@@ -12,6 +12,7 @@ from input_validation import (
     assert_valid_input,
     format_input_validation_report,
 )
+from mms.cost_curves import audit_thermal_cost_curves, build_thermal_cost_report
 from mms.diagnostics import build_diagnostics_report, build_warning_report
 from mms.logging_utils import JsonEventLogger, tee_output
 from mms.reports import build_mms_reports
@@ -197,6 +198,10 @@ def run(args):
     record_stage("mms_report_building", report_start)
 
     diagnostics_start = perf_counter()
+    result["Thermal_Cost_Curve_Audit"] = audit_thermal_cost_curves(
+        input_data, tolerance=args.validation_tolerance
+    )
+    result["Thermal_Cost_Report"] = build_thermal_cost_report(input_data, result)
     result["Warning_Report"] = build_warning_report(
         input_data, result, validation, tolerance=args.validation_tolerance
     )

@@ -30,6 +30,19 @@
             { "type": "number", "exclusiveMinimum": 0 }
           ]
         },
+        "cost_curve_time_unit": {
+          "enum": [
+            "euro_per_mw_per_minute",
+            "euro_per_mwh",
+            "euro_per_dispatch_period"
+          ],
+          "description": "Unit convention for thermal PWL cost-curve coefficients."
+        },
+        "cost_curve_time_multiplier": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional explicit multiplier overriding cost_curve_time_unit."
+        },
         "early_stopping": {
           "type": "object",
           "properties": {
@@ -59,7 +72,28 @@
           "min_power(MW)",
           "operating-states",
           "operating-state-transitions"
-        ]
+        ],
+        "properties": {
+          "var_gen_cost(euro/MW)": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "array",
+                "minItems": 2,
+                "items": { "type": "number" },
+                "description": "Strictly increasing PWL breakpoints in MW for thermal units."
+              },
+              {
+                "type": "array",
+                "minItems": 2,
+                "items": { "type": "number", "minimum": 0 },
+                "description": "Base cost at first breakpoint followed by marginal segment costs."
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
       }
     },
     "Time_granularity": { "type": "number", "exclusiveMinimum": 0 },

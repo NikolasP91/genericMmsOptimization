@@ -74,6 +74,28 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual("input_validation", report["issues"][0]["stage"])
         self.assertIn("Generating_Units", report["issues"][0]["message"])
 
+    def test_warning_report_includes_thermal_cost_curve_audit_issues(self):
+        report = build_warning_report(
+            {},
+            {
+                "Thermal_Cost_Curve_Audit": {
+                    "issues": [
+                        {
+                            "severity": "warning",
+                            "code": "nonconvex_marginal_costs",
+                            "message": "PWL marginal costs decrease.",
+                            "unit_index": 0,
+                            "gen_id": 7,
+                        }
+                    ]
+                }
+            },
+        )
+
+        self.assertEqual("warning", report["status"])
+        self.assertEqual("thermal_cost_curve_nonconvex_marginal_costs", report["warnings"][0]["code"])
+        self.assertEqual(7, report["warnings"][0]["gen_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

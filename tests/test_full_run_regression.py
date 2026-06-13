@@ -50,14 +50,17 @@ class FullRunRegressionTests(unittest.TestCase):
             solve_metadata = output["Solve_Metadata"]
             self.assertEqual("Optimal", output["Solution_Status"])
             self.assertEqual("passed", output["Validation"]["status"])
-            self.assertAlmostEqual(373212.7626889, solve_metadata["objective_value"], delta=1e-3)
-            self.assertEqual(11442, solve_metadata["num_constraints"])
-            self.assertEqual(4973, solve_metadata["num_variables"])
+            self.assertAlmostEqual(377843.11995837, solve_metadata["objective_value"], delta=1e-3)
+            self.assertEqual(11346, solve_metadata["num_constraints"])
+            self.assertEqual(4877, solve_metadata["num_variables"])
             self.assertEqual(1000.0, solve_metadata["big_m"])
             self.assertGreaterEqual(solve_metadata["mps_write_seconds"], 0)
             self.assertGreaterEqual(solve_metadata["solver_seconds"], 0)
             self.assertEqual("passed", output["Diagnostics_Report"]["status"])
-            self.assertIn(output["Warning_Report"]["status"], ("passed", "warning"))
+            self.assertEqual("passed", output["Warning_Report"]["status"])
+            self.assertEqual("passed", output["Thermal_Cost_Curve_Audit"]["status"])
+            self.assertEqual(0, output["Thermal_Cost_Curve_Audit"]["warning_count"])
+            self.assertAlmostEqual(91203.75, output["Thermal_Cost_Report"]["summary"]["thermal_cost"])
             self.assertGreater(output["Performance_Profile"]["total_seconds"], 0)
             self.assertIn("pipeline", output["Performance_Profile"])
 
@@ -70,6 +73,8 @@ class FullRunRegressionTests(unittest.TestCase):
                 "dispatch_instructions.json",
                 "reserve_monitoring_report.json",
                 "res_curtailment_report.json",
+                "thermal_cost_curve_audit.json",
+                "thermal_cost_report.json",
                 "warning_report.json",
                 "diagnostics_report.json",
                 "performance_profile.json",

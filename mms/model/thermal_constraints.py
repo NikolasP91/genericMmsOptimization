@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pulp as pl
 
+from mms.cost_curves import cost_curve_time_multiplier, parse_thermal_cost_curve
 from mms.model.bounds import forbidden_zone_big_m
 
 
@@ -63,46 +64,54 @@ def create_mustRun_constraints(prob, objective_terms, input_data, data, interval
 
 
 def create_variable_cost_curve_calculation_constraints(input_data, prob, objective_terms, power, data, intervals, M, state, CONV):
-    # M = 10000
-    u_1 = [[[pl.LpVariable(name=f'u_1_{i + 1}_{t}_{s_index}', lowBound=0, upBound=1, cat='Binary') for s_index in
-             range(0, len(gen['var_gen_cost(euro/MW)'][0])-1)] for t in intervals] for i, gen in enumerate(data)]
-
-    delta_ = [[[pl.LpVariable(name=f'delta_{i + 1}_{t}_{s_index}', lowBound=0, upBound=None) for s_index in range(0, len(gen['var_gen_cost(euro/MW)'][0])-1)] for t in intervals] for i, gen in enumerate(data)]
-   # unit_cost = [[pl.LpVariable(name=f'unit_cost_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
+    cost_multiplier = cost_curve_time_multiplier(input_data)
+    u_1 = [[[] for _ in intervals] for _ in data]
+    delta_ = [[[] for _ in intervals] for _ in data]
 
     for i, gen in enumerate(data):
-        p_int = gen['var_gen_cost(euro/MW)'][0][:]
-        # p_int.append(gen['max_power(MW)'])
-        # p_int.insert(0, 0)
-        u_c = gen['var_gen_cost(euro/MW)'][1][:]
-        # u_c.append(u_c[-1])
-        # u_c.insert(0, u_c[0])
-        # u_c = [p_int[k]*u_c[k] for k in range(len(p_int))]
         if i in CONV:
-            n = len(p_int)
+            breakpoints, coefficients, widths, is_convex = parse_thermal_cost_curve(gen)
+            if (
+                not breakpoints
+                or len(coefficients) != len(breakpoints)
+                or not widths
+                or any(width <= 0 for width in widths)
+                or any(coefficient < 0 for coefficient in coefficients)
+            ):
+                raise ValueError(
+                    f"Thermal unit {gen.get('gen_id', i)} has an invalid var_gen_cost(euro/MW) curve."
+                )
+            slopes = coefficients[1:]
+            segment_count = len(widths)
             for t in intervals[1:]:
-                prob += power[i][t] == pl.lpSum(delta_[i][t][s_index] for s_index in range(n-1)) + p_int[0] * state[i][t]
+                delta_[i][t] = [
+                    pl.LpVariable(name=f'delta_{i + 1}_{t}_{s_index}', lowBound=0, upBound=None)
+                    for s_index in range(segment_count)
+                ]
+                prob += power[i][t] == pl.lpSum(delta_[i][t]) + breakpoints[0] * state[i][t]
 
-                for s_index in range(n-1):
-                    if s_index == 0:
+                if is_convex:
+                    # Convex PWL costs do not need segment-selection binaries: with nondecreasing
+                    # slopes, cost minimization naturally fills cheaper segments first.
+                    for s_index, width in enumerate(widths):
+                        prob += delta_[i][t][s_index] <= width * state[i][t]
+                else:
+                    # Nonconvex/decreasing slopes need ordered-fill binaries so later cheaper
+                    # segments cannot be used before all preceding segments are full.
+                    u_1[i][t] = [
+                        pl.LpVariable(name=f'u_1_{i + 1}_{t}_{s_index}', lowBound=0, upBound=1, cat='Binary')
+                        for s_index in range(max(0, segment_count - 1))
+                    ]
+                    prob += delta_[i][t][0] <= widths[0] * state[i][t]
+                    for s_index in range(1, segment_count):
+                        prob += delta_[i][t][s_index] <= widths[s_index] * u_1[i][t][s_index - 1]
+                    for s_index in range(segment_count - 1):
+                        prob += delta_[i][t][s_index] >= widths[s_index] * u_1[i][t][s_index]
 
-                        prob += (p_int[s_index + 1] - p_int[s_index]) * u_1[i][t][s_index] <= delta_[i][t][s_index]
-
-                        prob += (p_int[s_index + 1] - p_int[s_index]) * state[i][t] >= delta_[i][t][s_index]
-
-                    elif s_index == n-2:
-
-                        prob += (p_int[s_index + 1] - p_int[s_index]) * u_1[i][t][s_index - 1] >= delta_[i][t][s_index]
-
-                    else:
-
-                        prob += (p_int[s_index + 1] - p_int[s_index]) * u_1[i][t][s_index] <= delta_[i][t][s_index]
-
-                        prob += (p_int[s_index + 1] - p_int[s_index]) * u_1[i][t][s_index - 1] >= delta_[i][t][s_index]
-
-
-
-                objective_terms += (pl.lpSum(u_c[s_index + 1] * delta_[i][t][s_index] for s_index in range(n-1)) + u_c[0] * state[i][t]) * input_data["Time_granularity"]
+                objective_terms += (
+                    pl.lpSum(slopes[s_index] * delta_[i][t][s_index] for s_index in range(segment_count))
+                    + coefficients[0] * state[i][t]
+                ) * cost_multiplier
     # These constraints (following) are used to ensure that z_1[i][t][s_index] takes the value of power[i][t]
     # # when u_1[i][t][s_index] is 1 and takes the value 0 otherwise.
     # for i, gen in enumerate(data):

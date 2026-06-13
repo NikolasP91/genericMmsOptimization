@@ -85,6 +85,20 @@ def build_warning_report(input_data, output_data, validation_report=None, tolera
                         shortfall_mw=metrics.get("shortfall_mw"),
                     )
 
+    cost_curve_audit = output_data.get("Thermal_Cost_Curve_Audit", {})
+    for issue in cost_curve_audit.get("issues", []):
+        if issue.get("severity") not in ("warning", "error"):
+            continue
+        _add_warning(
+            warnings,
+            f"thermal_cost_curve_{issue.get('code', 'issue')}",
+            issue.get("message", "Thermal cost-curve audit issue."),
+            severity=issue.get("severity", "warning"),
+            unit_index=issue.get("unit_index"),
+            gen_id=issue.get("gen_id"),
+            segment_index=issue.get("segment_index"),
+        )
+
     if validation_report:
         for check in validation_report.get("checks", []):
             if check.get("status") == "failed":
@@ -95,8 +109,10 @@ def build_warning_report(input_data, output_data, validation_report=None, tolera
                     severity=check.get("severity", "error"),
                 )
 
+    has_errors = any(warning.get("severity") == "error" for warning in warnings)
+
     return {
-        "status": "passed" if not warnings else "warning",
+        "status": "failed" if has_errors else ("passed" if not warnings else "warning"),
         "tolerance": tolerance,
         "warning_count": len(warnings),
         "warnings": warnings,
@@ -127,6 +143,21 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
                 "stage": "solve",
                 "severity": "error",
                 "message": f"Solver status is {solver_status}.",
+            }
+        )
+
+    cost_curve_audit = output_data.get("Thermal_Cost_Curve_Audit", {})
+    for issue in cost_curve_audit.get("issues", []):
+        if issue.get("severity") != "error":
+            continue
+        issue_records.append(
+            {
+                "stage": "thermal_cost_curve_audit",
+                "severity": "error",
+                "name": issue.get("code"),
+                "message": issue.get("message"),
+                "unit_index": issue.get("unit_index"),
+                "gen_id": issue.get("gen_id"),
             }
         )
 
@@ -170,7 +201,12 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
 
     status = (
         "failed"
-        if error_report or solver_status not in (None, "Optimal") or validation_report.get("status") == "failed"
+        if (
+            error_report
+            or solver_status not in (None, "Optimal")
+            or validation_report.get("status") == "failed"
+            or warning_report.get("status") == "failed"
+        )
         else "passed"
     )
     if status == "passed" and warning_report.get("warning_count", 0) > 0:
@@ -194,6 +230,13 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
             "big_m": solve_metadata.get("big_m"),
             "num_constraints": solve_metadata.get("num_constraints"),
             "num_variables": solve_metadata.get("num_variables"),
+        },
+        "thermal_cost_curve_summary": {
+            "status": cost_curve_audit.get("status"),
+            "thermal_unit_count": cost_curve_audit.get("thermal_unit_count"),
+            "issue_count": cost_curve_audit.get("issue_count", 0),
+            "warning_count": cost_curve_audit.get("warning_count", 0),
+            "error_count": cost_curve_audit.get("error_count", 0),
         },
         "slowest_constraint_sections": bottleneck_sections,
     }

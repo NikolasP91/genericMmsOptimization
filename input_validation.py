@@ -1,3 +1,6 @@
+from mms.cost_curves import DEFAULT_COST_TIME_UNIT, audit_thermal_cost_curves
+
+
 REQUIRED_TOP_LEVEL_KEYS = {
     "Cost_parameters",
     "Other_coefficients",
@@ -177,6 +180,17 @@ def validate_input_data(input_data):
             "gen_id values are not contiguous from 0. Current model code assumes gen_id equals list position."
         )
 
+    cost_curve_audit = audit_thermal_cost_curves(input_data)
+    for issue in cost_curve_audit.get("issues", []):
+        message = (
+            f"Thermal cost curve audit {issue.get('code')} for "
+            f"Generating_Units[{issue.get('unit_index')}]: {issue.get('message')}"
+        )
+        if issue.get("severity") == "error":
+            errors.append(message)
+        elif issue.get("severity") == "warning":
+            warnings.append(message)
+
     optimization_parameters = input_data.get("optimization_parameters", {})
     if not isinstance(optimization_parameters, dict):
         errors.append("optimization_parameters must be an object.")
@@ -189,6 +203,22 @@ def validate_input_data(input_data):
     big_m = optimization_parameters.get("big_m", "auto")
     if big_m != "auto" and (not _is_number(big_m) or big_m <= 0):
         errors.append("optimization_parameters.big_m must be 'auto' or a positive number.")
+
+    cost_curve_time_unit = optimization_parameters.get("cost_curve_time_unit", DEFAULT_COST_TIME_UNIT)
+    if cost_curve_time_unit not in (
+        "euro_per_mw_per_minute",
+        "euro_per_mwh",
+        "euro_per_dispatch_period",
+    ):
+        errors.append(
+            "optimization_parameters.cost_curve_time_unit must be "
+            "'euro_per_mw_per_minute', 'euro_per_mwh', or 'euro_per_dispatch_period'."
+        )
+    cost_curve_time_multiplier = optimization_parameters.get("cost_curve_time_multiplier")
+    if cost_curve_time_multiplier is not None and (
+        not _is_number(cost_curve_time_multiplier) or cost_curve_time_multiplier <= 0
+    ):
+        errors.append("optimization_parameters.cost_curve_time_multiplier must be a positive number.")
 
     early_stopping = optimization_parameters.get("early_stopping", {})
     if early_stopping is not None:

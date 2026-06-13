@@ -63,6 +63,7 @@
     "solver": "highs",
     "require_optimal": true,
     "big_m": "auto",
+    "cost_curve_time_unit": "euro_per_mw_per_minute",
     "highs_options": {
       "user_objective_scale": -4
     },
@@ -107,9 +108,9 @@
         ],
         [
           2.35,
-          2.35,
-          2.31,
-          2.32
+          2.45,
+          2.55,
+          2.65
         ]
       ],
       "start_up_cost(euro)": 1600,
@@ -305,13 +306,13 @@
           4.0,
           9.6,
           12.0,
-          17.0
+          17.5
         ],
         [
           8.1,
-          8.1,
-          7.6,
-          5.5
+          8.3,
+          9.4,
+          10.6
         ]
       ],
       "start_up_cost(euro)": 1200,

@@ -391,25 +391,37 @@ def audit_thermal_cost_curves(input_data, tolerance=1e-6):
                 )
 
             max_power = _max_positive(unit.get("max_power(MW)"))
-            max_availability = _max_positive(unit.get("availability"))
-            if max_power > tolerance and max_availability > tolerance:
-                effective_max = min(max_power, max_availability)
-            else:
-                effective_max = max(max_power, max_availability)
-            if breakpoints[-1] + tolerance < effective_max:
+            if breakpoints[-1] + tolerance < max_power:
                 _add_issue(
                     unit_issues,
                     "warning",
-                    "cost_curve_does_not_cover_capacity",
+                    "cost_curve_does_not_cover_max_power",
                     (
                         "Last thermal cost-curve breakpoint is below the unit's declared "
-                        "maximum/available capacity, so the model can only cost dispatch up "
-                        "to the curve endpoint."
+                        "maximum power. Production-cost curves should normally cover the "
+                        "full technical dispatch range, while availability limits should "
+                        "remain period-specific constraints."
                     ),
                     unit_index,
                     gen_id,
                     last_breakpoint_mw=breakpoints[-1],
-                    declared_capacity_mw=effective_max,
+                    declared_max_power_mw=max_power,
+                )
+            max_availability = _max_positive(unit.get("availability"))
+            if breakpoints[-1] + tolerance < max_availability:
+                _add_issue(
+                    unit_issues,
+                    "warning",
+                    "cost_curve_does_not_cover_availability",
+                    (
+                        "Last thermal cost-curve breakpoint is below the unit's maximum "
+                        "available power in this input scenario, so dispatch above the "
+                        "curve endpoint would be impossible or unpriced."
+                    ),
+                    unit_index,
+                    gen_id,
+                    last_breakpoint_mw=breakpoints[-1],
+                    max_available_power_mw=max_availability,
                 )
 
         if len(breakpoints) >= 2 and len(costs) == len(breakpoints):

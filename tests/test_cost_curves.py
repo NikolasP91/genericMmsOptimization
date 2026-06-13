@@ -70,7 +70,8 @@ class ThermalCostCurveAuditTests(unittest.TestCase):
         codes = {issue["code"] for issue in report["issues"]}
         self.assertEqual("warning", report["status"])
         self.assertIn("nonconvex_marginal_costs", codes)
-        self.assertIn("cost_curve_does_not_cover_capacity", codes)
+        self.assertIn("cost_curve_does_not_cover_max_power", codes)
+        self.assertIn("cost_curve_does_not_cover_availability", codes)
 
     def test_malformed_curve_fails_input_validation_early(self):
         data = copy.deepcopy(_base_input())

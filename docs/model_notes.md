@@ -181,8 +181,11 @@ segments look consistent with a convex quadratic approximation.
 - coefficients are nonnegative;
 - marginal segment costs are nondecreasing, as expected for a convex quadratic
   cost approximation;
-- the first breakpoint matches minimum power and the last breakpoint covers the
-  declared/available dispatch capacity.
+- the first breakpoint matches minimum power;
+- the last breakpoint covers declared `max_power(MW)`, because the cost curve is
+  unit data and should span the full technical dispatch range;
+- the last breakpoint also covers the maximum input availability for the current
+  scenario, so the active model cannot dispatch beyond the priced curve.
 
 The audit is embedded in `optimization_output.json` and written separately as
 `runs/latest/thermal_cost_curve_audit.json`.

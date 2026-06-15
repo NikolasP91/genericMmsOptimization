@@ -18,14 +18,11 @@ from mms.model.core import (
 )
 from mms.model.operating_states import (
     create_allowed_operating_states_transition_constraints,
-    create_operating_state_max_time_constraints,
-    create_operating_state_max_time_constraints_b,
-    create_operating_state_min_time_constraints_a,
-    create_operating_state_min_time_constraints_b,
-    create_min_time_states_constraints_states,
+    create_operating_state_max_transition_time_between_states_constraints_b,
     create_min_transition_time_between_states_constraints_a,
     create_min_transition_time_between_states_constraints_b,
     create_operating_states_power_levels_constraints,
+    create_state_min_time_constraints,
 )
 from mms.model.res_dispatch import create_res_pv_2_dispatch_variables_constraints
 from mms.model.reserves import (
@@ -215,35 +212,26 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     if input_data["constraints"]["allowed_thermal_states_transition_constraints"]:
         with build_tracker.section("allowed_operating_state_transitions"):
             prob, objective_terms = create_allowed_operating_states_transition_constraints(prob, objective_terms, data, intervals, u_2_dict, M) # u_2 --> u_2_dict done
-    if input_data["constraints"].get("operating_states_max_time_constraint", False):
-        with build_tracker.section("operating_state_max_time"):
-            prob, objective_terms = create_operating_state_max_time_constraints(
-                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals, CONV, RES
-            )  # u_2 --> u_2_dict
+    # Final operating-state timing set:
+    # 1) transition minimum A: source-side minimum time before leaving A;
+    # 2) transition minimum B: destination-side minimum stay in B;
+    # 3) transition maximum B: destination-side maximum stay in B.
+    # Generic state-level operating-state dwell-time helpers remain in the
+    # module for legacy/testing use, but are not part of this active assembly.
     if (
-        input_data["constraints"].get("operating_states_max_time_constraint_b", False)
-        or input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+        input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+        or input_data["constraints"].get("operating_states_max_time_constraint_b", False)
     ):
-        with build_tracker.section("operating_state_max_time_b"):
-            prob, objective_terms = create_operating_state_max_time_constraints_b(
-                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
-            )  # u_2 --> u_2_dict
-    if input_data["constraints"].get("operating_states_min_time_constraint_a", False):
-        with build_tracker.section("operating_state_min_time_a"):
-            prob, objective_terms = create_operating_state_min_time_constraints_a(
-                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
-            )  # u_2 --> u_2_dict
-    if (
-        input_data["constraints"].get("operating_states_min_time_constraint_b", False)
-        or input_data["constraints"].get("operating_states_min_time_constraint", False)
-    ):
-        with build_tracker.section("operating_state_min_time_b"):
-            prob, objective_terms = create_operating_state_min_time_constraints_b(
+        with build_tracker.section("max_transition_time_between_states_b"):
+            prob, objective_terms = create_operating_state_max_transition_time_between_states_constraints_b(
                 prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
             )  # u_2 --> u_2_dict
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_a"]:
         with build_tracker.section("min_transition_time_between_states_a"):
             prob, objective_terms = create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals)
+    # Transition-specific B-side minimum timing. This uses min-transition-time_b
+    # fields on operating-state transition arcs and constrains the destination
+    # state after a specific A -> B transition.
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_b"]:
         with build_tracker.section("min_transition_time_between_states_b"):
             prob,  objective_terms = create_min_transition_time_between_states_constraints_b(prob,  objective_terms, input_data, data, u_2_dict, intervals)
@@ -295,10 +283,12 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     if input_data["constraints"]["OOS_mode_constraints"]:
         with build_tracker.section("oos_mode"):
             prob, objective_terms = create_OOS_mode_constraints(prob, objective_terms, input_data, data, power, intervals, PV_no_SP)
-    if input_data["constraints"]["states_time_constraint"]:
-        # print('--------- states --------')
+    # State-level timing is intentionally limited to minimum on/off time. It
+    # uses the unit-level state/startup/shutdown variables and the
+    # state-transitions min-transition-time fields.
+    if input_data["constraints"].get("state_min_time_constraint", input_data["constraints"].get("states_time_constraint", False)):
         with build_tracker.section("state_minimum_time"):
-            prob, objective_terms = create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown)
+            prob, objective_terms = create_state_min_time_constraints(prob, objective_terms, input_data, data, state, intervals, startup, shutdown)
 
     # prob += u_2_dict[(2, 8, 4)] == 1
     # prob += u_2_dict[(2, 16, 6)] == 1

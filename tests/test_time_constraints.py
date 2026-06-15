@@ -10,13 +10,10 @@ import pulp as pl  # Supplies the PuLP variables, problems, and HiGHS solver wra
 # Import the exact constraint builders under test so these scenarios exercise
 # the same algebra used by the production optimization model.
 from mms.model.operating_states import (
-    create_min_time_states_constraints_states,
     create_min_transition_time_between_states_constraints_a,
     create_min_transition_time_between_states_constraints_b,
-    create_operating_state_max_time_constraints,
-    create_operating_state_max_time_constraints_b,
-    create_operating_state_min_time_constraints_a,
-    create_operating_state_min_time_constraints_b,
+    create_operating_state_max_transition_time_between_states_constraints_b,
+    create_state_min_time_constraints,
 )
 
 
@@ -36,18 +33,6 @@ def _cost_parameters():
         "x_min_transition_oper_states_b_left": 1000,
         # Penalty for new destination-side operating-state transition minimum-time violations.
         "x_min_transition_oper_states_b": 1000,
-        # Penalty for remaining generic operating-state minimum dwell time.
-        "x_min_oper_state_time_a_left": 1000,
-        # Penalty for new generic operating-state minimum dwell-time violations.
-        "x_min_oper_state_time_a": 1000,
-        # Penalty for remaining transition-specific destination-state dwell time.
-        "x_min_oper_state_time_b_left": 1000,
-        # Penalty for new transition-specific destination-state dwell-time violations.
-        "x_min_oper_state_time_b": 1000,
-        # Penalty for remaining generic operating-state maximum dwell-time violations.
-        "x_max_oper_state_time_left": 1000,
-        # Penalty for new generic operating-state maximum dwell-time violations.
-        "x_max_oper_state_time": 1000,
         # Penalty for remaining transition-specific maximum destination dwell-time violations.
         "x_max_oper_state_time_b_left": 1000,
         # Penalty for new transition-specific maximum destination dwell-time violations.
@@ -151,7 +136,7 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         shutdown = _fixed_binary_matrix(prob, "shutdown", 1, intervals, [{4: 1}])
 
         # Add the on/off state minimum-time constraints to the test problem.
-        prob, objective_terms = create_min_time_states_constraints_states(
+        prob, objective_terms = create_state_min_time_constraints(
             prob, 0, _input_data(), data, state, intervals, startup, shutdown
         )
 
@@ -162,61 +147,6 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         self.assertEqual(1, _value(prob, "s_min_state_b_left_1_1"))
         # The forced startup/shutdown pattern should require two in-horizon slack units.
         self.assertEqual(2, _sum_values(prob, "s_min_state_b_1_1_"))
-
-    def test_operating_state_minimum_dwell_a_and_b_detect_early_exit(self):
-        # Use five periods to test both initial remaining-time and new dwell-time violations.
-        intervals = [0, 1, 2, 3, 4]
-        # Create a minimization problem for the operating-state minimum dwell constraints.
-        prob = pl.LpProblem("operating_state_minimum_dwell_scenario", pl.LpMinimize)
-        # Define one enabled operating state with both remaining and regular minimum dwell requirements.
-        data = [
-            {
-                "gen_id": 0,
-                "operating-states": [
-                    {
-                        "id": 4,
-                        "isEnabled": True,
-                        "min-time-enabled-left": 1,
-                        "min-time-enabled": 2,
-                    }
-                ],
-            }
-        ]
-        # Force state 4 to be active at intervals 0 and 2 only, creating early exits.
-        u_2_dict = _fixed_operating_state_variables(
-            prob,
-            intervals,
-            {
-                4: {
-                    0: 1,
-                    1: 0,
-                    2: 1,
-                    3: 0,
-                    4: 0,
-                }
-            },
-        )
-
-        # Add generic operating-state minimum dwell constraints based on state-level timing fields.
-        prob, objective_terms = create_operating_state_min_time_constraints_a(
-            prob, 0, _input_data(), data, u_2_dict, len(intervals), intervals
-        )
-        # Add the paired B-family dwell constraints using the same forced schedule.
-        prob, objective_terms = create_operating_state_min_time_constraints_b(
-            prob, objective_terms, _input_data(), data, u_2_dict, len(intervals), intervals
-        )
-
-        # Solve so slack variables reveal the exact violation count.
-        _solve(prob, objective_terms)
-
-        # The initial active state violates one period of remaining A-family dwell time.
-        self.assertEqual(1, _value(prob, "s_min_oper_state_time_a_left_1_4_1"))
-        # The re-entry at interval 2 exits too early and triggers one A-family in-horizon slack.
-        self.assertEqual(1, _value(prob, "s_min_oper_state_time_a_1_1_4_3"))
-        # The same initial early exit is also visible in the B-family remaining-time slack.
-        self.assertEqual(1, _value(prob, "s_min_oper_state_time_b_left_1_4_1"))
-        # The B-family in-horizon slacks should sum to one violation.
-        self.assertEqual(1, _sum_values(prob, "s_min_oper_state_time_b_1_1_4_"))
 
     def test_min_transition_time_a_blocks_departure_from_source_state_too_soon(self):
         # Use five periods so the source state can be entered and exited twice.
@@ -310,45 +240,10 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         # Two in-horizon B-side slack units are needed because a three-period stay is violated.
         self.assertEqual(2, _sum_values(prob, "s_min_b_1_1_"))
 
-    def test_max_operating_time_constraints_detect_overstaying_generic_and_b_windows(self):
-        # Use five periods so a state can exceed a two-period maximum dwell limit.
+    def test_max_transition_time_b_detects_destination_state_overstay(self):
+        # Use five periods so a destination state can exceed a two-period transition-specific limit.
         intervals = [0, 1, 2, 3, 4]
-        # Create a problem for generic operating-state maximum-time constraints.
-        generic_prob = pl.LpProblem("generic_max_operating_time_scenario", pl.LpMinimize)
-        # Define one enabled state with one remaining period and a two-period maximum dwell limit.
-        generic_data = [
-            {
-                "gen_id": 0,
-                "operating-states": [
-                    {
-                        "id": 4,
-                        "isEnabled": True,
-                        "max-time-enabled-left": 1,
-                        "max-time-enabled": 2,
-                    }
-                ],
-            }
-        ]
-        # Force state 4 to remain active for four periods, which exceeds both max-time windows.
-        generic_u_2 = _fixed_operating_state_variables(
-            generic_prob,
-            intervals,
-            {4: {0: 1, 1: 1, 2: 1, 3: 1, 4: 0}},
-        )
-
-        # Add the generic maximum operating-state dwell constraints.
-        generic_prob, generic_objective = create_operating_state_max_time_constraints(
-            generic_prob, 0, _input_data(), generic_data, generic_u_2, len(intervals), intervals, CONV=[0], RES=[]
-        )
-        # Solve the generic maximum-time scenario.
-        _solve(generic_prob, generic_objective)
-
-        # One left-side slack is needed because the state overstays the remaining maximum window.
-        self.assertEqual(1, _value(generic_prob, "s_max_oper_state_time_left_1_4_2"))
-        # One in-horizon slack is needed because the state remains active beyond its two-period maximum.
-        self.assertEqual(1, _value(generic_prob, "s_max_oper_state_time_1_1_4_3"))
-
-        # Create a second problem for transition-specific B-side maximum dwell constraints.
+        # Create a problem for transition-specific B-side maximum timing constraints.
         transition_prob = pl.LpProblem("transition_max_operating_time_b_scenario", pl.LpMinimize)
         # Define a transition into state 5 with transition-specific maximum B-side timing metadata.
         transition_data = [
@@ -385,7 +280,7 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         )
 
         # Add transition-specific maximum B-side dwell constraints.
-        transition_prob, transition_objective = create_operating_state_max_time_constraints_b(
+        transition_prob, transition_objective = create_operating_state_max_transition_time_between_states_constraints_b(
             transition_prob, 0, _input_data(), transition_data, transition_u_2, len(intervals), intervals
         )
         # Solve the transition-specific maximum-time scenario.

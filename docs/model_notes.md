@@ -327,33 +327,28 @@ previous and current operating-state binaries and carries its own transition
 cost in the objective. This is closer to a standard network-flow-style unit
 commitment transition formulation and removes a source of weak big-M relaxation.
 
-Maximum operating-state timing is implemented but optional. Use
-`operating_states_max_time_constraint` with finite `max-time-enabled` and
-`max-time-enabled-left` values when a state-specific maximum dwell time is
-needed. Use `operating_states_max_time_constraint_b` with finite
-`max-transition-time_b` and `max-transition-time-left_b` values when a
-transition-specific B-style destination-state maximum time is needed. These
-constraints are inactive unless the corresponding flags are enabled and the
-input provides finite max-time data. A-style maximum transition timing fields
-(`max-transition-time_a`, `max-transition-time-left_a`) are not implemented.
+The final active timing formulation uses one unit state-level family and three
+operating-state transition families:
 
-The optional operating-state minimum dwell-time path is split into explicit A/B
-variants. `operating_states_min_time_constraint_a` limits early departures from
-the current/source operating state after entry. `operating_states_min_time_constraint_b`
-requires the unit to remain in the destination/current operating state after
-entry. In ordinary one-state-at-a-time commitment logic these are closely
-related, so enabling both is usually redundant and should be reserved for
-diagnostic experiments.
+- `state_min_time_constraint` uses `state-transitions[].transitions.min-transition-time`
+  and `min-transition-time-left` to enforce minimum online/offline time through
+  startup/shutdown variables.
+- `operating_states_min_transition_time_between_states_constraint_a` uses
+  `min-transition-time_a` and `min-transition-time-left_a` on an allowed
+  operating-state transition to prevent leaving source state A too soon.
+- `operating_states_min_transition_time_between_states_constraint_b` uses
+  `min-transition-time_b` and `min-transition-time-left_b` to require the
+  destination state B to persist after a specific A -> B transition.
+- `operating_states_max_transition_time_between_states_constraint_b` uses
+  `max-transition-time_b` and `max-transition-time-left_b` to cap the stay in
+  destination state B after a specific A -> B transition.
 
-The A slack variables are named
-`s_min_oper_state_time_a_left_{unit}_{state}_{t}` and
-`s_min_oper_state_time_a_1_{unit}_{state}_{t}`, with penalty keys
-`x_min_oper_state_time_a_left` and `x_min_oper_state_time_a`. The B slack
-variables are named `s_min_oper_state_time_b_left_{unit}_{state}_{t}` and
-`s_min_oper_state_time_b_1_{unit}_{state}_{t}`, with penalty keys
-`x_min_oper_state_time_b_left` and `x_min_oper_state_time_b`. The legacy
-unsuffixed `operating_states_min_time_constraint` flag is treated as B-style
-behavior for backward compatibility.
+Do not use A-style maximum transition timing fields
+(`max-transition-time_a`, `max-transition-time-left_a`); they are intentionally
+unsupported and validation warns that they are ignored. Generic operating-state
+dwell helpers remain in the code for legacy tests/experiments, but new input
+files should express operating-state timing through the transition-specific A/B
+fields above.
 
 RDAS/DS timing is period-indexed. A short operating-state duration such as 5 or
 25 minutes cannot be exactly represented by an hourly binary state variable. The

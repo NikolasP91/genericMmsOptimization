@@ -208,10 +208,18 @@ def create_operating_state_max_time_constraints(prob, objective_terms, input_dat
     return prob, objective_terms
 
 
-def create_operating_state_max_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
-    """Add optional soft B-style maximum destination-state dwell constraints."""
+def create_operating_state_max_transition_time_between_states_constraints_b(
+    prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
+):
+    """Add optional soft B-style maximum destination-state timing constraints."""
+    # This is the maximum-time counterpart of
+    # create_min_transition_time_between_states_constraints_b. It reads
+    # max-transition-time_b and max-transition-time-left_b from an allowed
+    # operating-state transition and caps how long the destination state B may
+    # remain active after a specific A -> B transition.
     s_max_oper_state_time_b_left = {}
     s_max_oper_state_time_b_1 = {}
+    dispatch_period_count = len(intervals) - 1
     for gen in data:
         gen_id = gen['gen_id']
         for allowed_transition in gen['operating-state-transitions']:
@@ -220,22 +228,33 @@ def create_operating_state_max_time_constraints_b(prob, objective_terms, input_d
                 next_state_id = next_state['id']
                 if from_oper_state_id == next_state_id:
                     continue
+                max_time_left = _finite_max_time(
+                    next_state.get('max-transition-time-left_b', 100000000000),
+                    dispatch_period_count,
+                )
+                max_time = _finite_max_time(
+                    next_state.get('max-transition-time_b', 100000000000),
+                    dispatch_period_count,
+                )
+                if max_time_left is None and max_time is None:
+                    continue
                 for t in intervals:
                     key = (gen_id, from_oper_state_id, next_state_id, t)
-                    s_max_oper_state_time_b_left[key] = pl.LpVariable(
-                        name=f's_max_oper_state_time_b_left_{gen_id + 1}_{from_oper_state_id}_{next_state_id}_{t}',
-                        lowBound=0,
-                        upBound=1,
-                        cat='Binary',
-                    )
-                    s_max_oper_state_time_b_1[key] = pl.LpVariable(
-                        name=f's_max_oper_state_time_b_1_{gen_id + 1}_{from_oper_state_id}_{next_state_id}_{t}',
-                        lowBound=0,
-                        upBound=1,
-                        cat='Binary',
-                    )
+                    if max_time_left is not None:
+                        s_max_oper_state_time_b_left[key] = pl.LpVariable(
+                            name=f's_max_oper_state_time_b_left_{gen_id + 1}_{from_oper_state_id}_{next_state_id}_{t}',
+                            lowBound=0,
+                            upBound=1,
+                            cat='Binary',
+                        )
+                    if max_time is not None:
+                        s_max_oper_state_time_b_1[key] = pl.LpVariable(
+                            name=f's_max_oper_state_time_b_1_{gen_id + 1}_{from_oper_state_id}_{next_state_id}_{t}',
+                            lowBound=0,
+                            upBound=1,
+                            cat='Binary',
+                        )
 
-    dispatch_period_count = len(intervals) - 1
     last_period = intervals[-1]
     for gen in data:
         gen_id = gen['gen_id']
@@ -289,13 +308,25 @@ def create_operating_state_max_time_constraints_b(prob, objective_terms, input_d
                         )
 
                 for t in intervals[1:]:
-                    objective_terms += (
-                            s_max_oper_state_time_b_left[(gen_id, from_oper_state_id, next_state_id, t)]
-                            * input_data["Cost_parameters"]["x_max_oper_state_time_b_left"]
-                            + s_max_oper_state_time_b_1[(gen_id, from_oper_state_id, next_state_id, t)]
-                            * input_data["Cost_parameters"]["x_max_oper_state_time_b"]
-                    )
+                    key = (gen_id, from_oper_state_id, next_state_id, t)
+                    if key in s_max_oper_state_time_b_left:
+                        objective_terms += (
+                                s_max_oper_state_time_b_left[key]
+                                * input_data["Cost_parameters"]["x_max_oper_state_time_b_left"]
+                        )
+                    if key in s_max_oper_state_time_b_1:
+                        objective_terms += (
+                                s_max_oper_state_time_b_1[key]
+                                * input_data["Cost_parameters"]["x_max_oper_state_time_b"]
+                        )
     return prob, objective_terms
+
+
+def create_operating_state_max_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    """Backward-compatible alias for B-style maximum transition timing."""
+    return create_operating_state_max_transition_time_between_states_constraints_b(
+        prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
+    )
 
 
 def create_operating_state_min_time_constraints_a(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
@@ -358,10 +389,17 @@ def create_operating_state_min_time_constraints_a(prob, objective_terms, input_d
     return prob, objective_terms
 
 
-def create_operating_state_min_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
-    # for gen in data:
-    #     for s_2_index, _ in enumerate(data[i]["Therm_state_min_time_on"]):
-    """Add optional soft B-style minimum destination-state dwell constraints."""
+def create_operating_state_min_time_constraints(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    """Add optional soft minimum dwell-time constraints for each operating state."""
+    # This is a state-level dwell rule, not a transition-side A/B rule.
+    # It reads min-time-enabled and min-time-enabled-left from operating-states
+    # and applies whenever the unit is in that operating state, independent of
+    # which previous operating state was used to enter it.
+    #
+    # The slack variable names and penalty keys still contain "_b" because older
+    # reports, tests, and JSON files already consume those names. The public
+    # builder and preferred constraint flag intentionally omit "_b" to avoid
+    # confusing this state-level dwell rule with transition-specific B timing.
     s_min_oper_state_time_b_left = {}
     s_min_oper_state_time_b_1 = {}
     for gen in data:
@@ -432,6 +470,13 @@ def create_operating_state_min_time_constraints_b(prob, objective_terms, input_d
     return prob, objective_terms
 
 
+def create_operating_state_min_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    """Backward-compatible alias for create_operating_state_min_time_constraints."""
+    return create_operating_state_min_time_constraints(
+        prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
+    )
+
+
 def create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals):
     """Add source-state transition timing constraints with A-style slacks."""
     s_min_a_left = [[pl.LpVariable(name=f's_min_a_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
@@ -488,6 +533,11 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
 
 def create_min_transition_time_between_states_constraints_b(prob,  objective_terms, input_data, data, u_2_dict, intervals):
     """Add destination-state transition timing constraints with B-style slacks."""
+    # This is a transition-specific B-side timing rule. It reads
+    # min-transition-time_b and min-transition-time-left_b from each allowed
+    # operating-state transition and requires the destination state B to remain
+    # active after a specific A -> B transition. The "_b" suffix is meaningful
+    # here because it refers to the target/destination side of the transition.
     s_min_b_left = [[pl.LpVariable(name=f's_min_b_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     s_min_b_1 = [[pl.LpVariable(name=f's_min_b_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     import copy
@@ -533,7 +583,7 @@ def create_min_transition_time_between_states_constraints_b(prob,  objective_ter
     return prob,  objective_terms
 
 
-def create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown):
+def create_state_min_time_constraints(prob, objective_terms, input_data, data, state, intervals, startup, shutdown):
     """Add online/offline minimum-time constraints using startup and shutdown variables."""
     s_min_state_b_left = [[pl.LpVariable(name=f's_min_state_b_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     s_min_state_b_1 = [[pl.LpVariable(name=f's_min_state_b_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
@@ -577,4 +627,11 @@ def create_min_time_states_constraints_states(prob, objective_terms, input_data,
 
 
     return prob, objective_terms
+
+
+def create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown):
+    """Backward-compatible alias for create_state_min_time_constraints."""
+    return create_state_min_time_constraints(
+        prob, objective_terms, input_data, data, state, intervals, startup, shutdown
+    )
 

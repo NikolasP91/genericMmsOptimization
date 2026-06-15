@@ -194,8 +194,8 @@ def solution_processing(solution, input_data):
         s_max_oper_state_time_left_df = s_max_oper_state_time_1_df = pd.DataFrame()
 
     if (
-        input_data["constraints"].get("operating_states_max_time_constraint_b", False)
-        or input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+        input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+        or input_data["constraints"].get("operating_states_max_time_constraint_b", False)
     ):
         s_max_oper_state_time_b_left_values = []
         s_max_oper_state_time_b_1_values = []
@@ -226,9 +226,12 @@ def solution_processing(solution, input_data):
     else:
         s_min_oper_state_time_a_left_df = s_min_oper_state_time_a_1_df = pd.DataFrame()
 
+    # Generic operating-state minimum dwell-time slacks. The preferred flag is
+    # operating_states_min_time_constraint; the old _b flag is accepted as a
+    # legacy alias, while historical slack variable names still include "_b".
     if (
-        input_data["constraints"].get("operating_states_min_time_constraint_b", False)
-        or input_data["constraints"].get("operating_states_min_time_constraint", False)
+        input_data["constraints"].get("operating_states_min_time_constraint", False)
+        or input_data["constraints"].get("operating_states_min_time_constraint_b", False)
     ):
         s_min_oper_state_time_b_left_values = []
         s_min_oper_state_time_b_1_values = []
@@ -244,7 +247,7 @@ def solution_processing(solution, input_data):
     else:
         s_min_oper_state_time_b_left_df = s_min_oper_state_time_b_1_df = pd.DataFrame()
 
-    if input_data["constraints"]["states_time_constraint"]:
+    if input_data["constraints"].get("state_min_time_constraint", input_data["constraints"].get("states_time_constraint", False)):
         s_min_state_b_left_values = []
         s_min_state_b_1_values = []
         for v in solution:
@@ -1322,18 +1325,18 @@ def operating_state_min_time_constraints_violations(
             "min-time-a",
         )
     if (
-        input_data["constraints"].get("operating_states_min_time_constraint_b", False)
-        or input_data["constraints"].get("operating_states_min_time_constraint", False)
+        input_data["constraints"].get("operating_states_min_time_constraint", False)
+        or input_data["constraints"].get("operating_states_min_time_constraint_b", False)
     ):
         print_violations(
             s_min_oper_state_time_b_left_df,
             "s_min_oper_state_time_b_left",
-            "min-time-b-left",
+            "operating-state-min-time-left",
         )
         print_violations(
             s_min_oper_state_time_b_1_df,
             "s_min_oper_state_time_b_1",
-            "min-time-b",
+            "operating-state-min-time",
         )
     return None
 
@@ -1395,8 +1398,8 @@ def operating_state_max_time_constraints_violations(
             "max-time",
         )
     if (
-        input_data["constraints"].get("operating_states_max_time_constraint_b", False)
-        or input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+        input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+        or input_data["constraints"].get("operating_states_max_time_constraint_b", False)
     ):
         print_violations(
             s_max_oper_state_time_b_left_df,
@@ -1415,7 +1418,7 @@ def operating_state_max_time_constraints_violations(
 
 def min_state_transition_constraints_b_violations(input_data, s_min_state_b_left_df,  s_min_state_b_1_df):
     """Print or summarize min state transition constraints b violation slacks after solve."""
-    if input_data["constraints"]["states_time_constraint"]:
+    if input_data["constraints"].get("state_min_time_constraint", input_data["constraints"].get("states_time_constraint", False)):
         min_state_b_left_violated_constraints = []
         # Iterate over each row of the dataframe
         for index, row in s_min_state_b_left_df.iterrows():

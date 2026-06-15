@@ -14,10 +14,10 @@ from mms.model.bounds import (
     reserve_activation_bound,
 )
 from mms.model.operating_states import (
+    create_operating_state_max_transition_time_between_states_constraints_b,
     create_operating_state_max_time_constraints,
-    create_operating_state_max_time_constraints_b,
+    create_operating_state_min_time_constraints,
     create_operating_state_min_time_constraints_a,
-    create_operating_state_min_time_constraints_b,
 )
 from mms.model.preprocessing import (
     filter_generating_units,
@@ -170,7 +170,7 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         prob, objective_terms = create_operating_state_min_time_constraints_a(
             prob, 0, input_data, data, u_2_dict, len(intervals), intervals
         )
-        prob, objective_terms = create_operating_state_min_time_constraints_b(
+        prob, objective_terms = create_operating_state_min_time_constraints(
             prob, objective_terms, input_data, data, u_2_dict, len(intervals), intervals
         )
         prob += objective_terms
@@ -234,7 +234,7 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         prob, objective_terms = create_operating_state_max_time_constraints(
             prob, 0, input_data, data, u_2_dict, len(intervals), intervals, CONV=[0], RES=[]
         )
-        prob, objective_terms = create_operating_state_max_time_constraints_b(
+        prob, objective_terms = create_operating_state_max_transition_time_between_states_constraints_b(
             prob, objective_terms, input_data, data, u_2_dict, len(intervals), intervals
         )
         prob += objective_terms
@@ -242,7 +242,7 @@ class ModelModuleBoundaryTests(unittest.TestCase):
 
         self.assertIn("s_max_oper_state_time_left_1_4_1", variable_names)
         self.assertIn("s_max_oper_state_time_1_1_4_2", variable_names)
-        self.assertIn("s_max_oper_state_time_b_left_1_4_5_1", variable_names)
+        self.assertNotIn("s_max_oper_state_time_b_left_1_4_5_1", variable_names)
         self.assertIn("s_max_oper_state_time_b_1_1_4_5_2", variable_names)
 
     def test_reserve_activation_bound_uses_unit_and_state_limits(self):

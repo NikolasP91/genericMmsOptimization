@@ -29,7 +29,7 @@ from mms.pipeline import parse_and_execute_optimization
 from solution_validation import format_validation_report, validate_solution
 
 
-DEFAULT_CONFIG_FILE = "v2.1_last_real_values_RDAS_60_FAT---test-case_BIOMASS.json"
+DEFAULT_CONFIG_FILE = "new_json_test.json"         # "v2.1_last_real_values_RDAS_60_FAT---test-case_BIOMASS.json" / "new_json_test.json"
 DEFAULT_OUTPUT_FILE = "optimization_output.json"
 
 

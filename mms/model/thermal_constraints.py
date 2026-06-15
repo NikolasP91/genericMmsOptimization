@@ -285,7 +285,7 @@ def create_availability_program(prob, objective_terms, input_data, data, power, 
 
 
 def create_OOS_mode_constraints(prob, objective_terms, input_data, data, power, intervals, PV_no_SP):
-    """Add out-of-service mode constraints and violation slacks."""
+    """Add out-of-sequence mode constraints and violation slacks."""
     s_power_OOS_less_plus = [[pl.LpVariable(name=f's_power_OOS_less_plus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
     s_power_OOS_more_minus = [[pl.LpVariable(name=f's_power_OOS_more_minus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
 

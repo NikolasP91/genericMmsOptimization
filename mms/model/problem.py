@@ -216,8 +216,9 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     # 1) transition minimum A: source-side minimum time before leaving A;
     # 2) transition minimum B: destination-side minimum stay in B;
     # 3) transition maximum B: destination-side maximum stay in B.
-    # Generic state-level operating-state dwell-time helpers remain in the
-    # module for legacy/testing use, but are not part of this active assembly.
+    # Older generic operating-state dwell-time helpers were intentionally
+    # removed so the active model has one source of truth for each accepted
+    # operating-state timing constraint.
     if (
         input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
         or input_data["constraints"].get("operating_states_max_time_constraint_b", False)

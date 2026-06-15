@@ -1,3 +1,5 @@
+"""Top-level PuLP problem assembly, solver invocation, and solve metadata collection."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling kernel.
 
 import time
@@ -46,6 +48,7 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
                              solver_name="highs", gapRel=None, gapAbs=None, threads=None,
                              solver_options=None, require_optimal=True):
 
+    """Assemble the PuLP MIP, solve it, and return variables plus solve metadata."""
     big_m_setting = input_data.get("optimization_parameters", {}).get("big_m", "auto")
     if big_m_setting == "auto":
         M = estimate_big_m(input_data, data, intervals)

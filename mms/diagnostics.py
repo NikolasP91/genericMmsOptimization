@@ -1,21 +1,28 @@
+"""Warning and diagnostics report builders for optimization runs."""
+
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _as_list(value):
+    """Return the value when it is a list, otherwise an empty list."""
     return value if isinstance(value, list) else []
 
 
 def _max_abs(values):
+    """Return the largest absolute numeric value from an iterable."""
     numeric_values = [abs(value) for value in values if _is_number(value)]
     return max(numeric_values) if numeric_values else 0.0
 
 
 def _sum_positive(values, tolerance):
+    """Internal helper for diagnostics reporting."""
     return sum(value for value in values if _is_number(value) and value > tolerance)
 
 
 def _add_warning(warnings, code, message, severity="warning", **fields):
+    """Append a structured warning record to a report."""
     record = {
         "code": code,
         "severity": severity,
@@ -26,6 +33,7 @@ def _add_warning(warnings, code, message, severity="warning", **fields):
 
 
 def _error_message(error_report):
+    """Internal helper for diagnostics reporting."""
     if error_report.get("error"):
         return error_report["error"]
     errors = error_report.get("errors")
@@ -35,6 +43,7 @@ def _error_message(error_report):
 
 
 def build_warning_report(input_data, output_data, validation_report=None, tolerance=1e-3):
+    """Collect warnings from validation, diagnostics, slacks, and audits."""
     warnings = []
 
     load_curtailment = _as_list(output_data.get("Load_Cutrailment"))
@@ -150,6 +159,7 @@ def build_warning_report(input_data, output_data, validation_report=None, tolera
 
 
 def build_diagnostics_report(input_data, output_data=None, validation_report=None, error_report=None, tolerance=1e-3):
+    """Build a compact run-health summary for successful or failed executions."""
     output_data = output_data or {}
     validation_report = validation_report or {}
     solve_metadata = output_data.get("Solve_Metadata", {})

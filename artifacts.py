@@ -1,9 +1,12 @@
+"""Artifact-writing helpers for snapshots, reports, logs, and exported MPS files."""
+
 import json
 import shutil
 from pathlib import Path
 
 
 def prepare_artifact_dir(path):
+    """Ensure the artifact directory exists and return it as a Path."""
     if path is None:
         return None
     artifact_dir = Path(path)
@@ -12,6 +15,7 @@ def prepare_artifact_dir(path):
 
 
 def write_json(path, data):
+    """Write JSON data with stable indentation and UTF-8 encoding."""
     with Path(path).open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -24,6 +28,7 @@ def write_run_artifacts(
     diagnostics_report=None,
     log_file=None,
 ):
+    """Write the standard collection of input, output, report, log, and MPS artifacts."""
     if artifact_dir is None:
         return
     write_json(artifact_dir / "input_snapshot.json", input_data)

@@ -1,3 +1,5 @@
+"""MMS-style dispatch, reserve-monitoring, and RES-curtailment report builders."""
+
 RESERVE_FIELDS = {
     "primary": "Primary_Active_Power_Reserves(MW)",
     "secondary": "Secondary_Active_Power_Reserves(MW)",
@@ -15,20 +17,24 @@ RESERVE_VIOLATION_FIELDS = {
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _round(value, digits=6):
+    """Round a numeric value for JSON reports while preserving None."""
     if value is None:
         return None
     return round(float(value), digits)
 
 
 def _series(value):
+    """Return the value when it is a list, otherwise an empty list."""
     return value if isinstance(value, list) else []
 
 
 def _value_at(values, index, default=0.0):
+    """Safely read a numeric value at an index with a default fallback."""
     values = _series(values)
     if index < len(values) and _is_number(values[index]):
         return float(values[index])
@@ -36,6 +42,7 @@ def _value_at(values, index, default=0.0):
 
 
 def _filtered_input_units(input_data):
+    """Return input units that survive the availability filter."""
     units = []
     for unit in input_data.get("Generating_Units", []):
         availability = unit.get("availability", 0)
@@ -48,6 +55,7 @@ def _filtered_input_units(input_data):
 
 
 def _unit_type(unit):
+    """Classify a unit from its comments field for report logic."""
     comments = unit.get("comments", "")
     if comments.startswith("Therm"):
         return "thermal"
@@ -59,6 +67,7 @@ def _unit_type(unit):
 
 
 def _period_count(output_data):
+    """Infer the number of dispatch periods represented in output data."""
     units = output_data.get("Generating_Units", [])
     if not units:
         return 0
@@ -66,6 +75,7 @@ def _period_count(output_data):
 
 
 def _reserve_pair(unit, reserve_field, period):
+    """Read upward and downward reserve values for one unit and period."""
     reserve_data = unit.get(reserve_field, [])
     if not isinstance(reserve_data, list) or len(reserve_data) < 2:
         return 0.0, 0.0
@@ -73,6 +83,7 @@ def _reserve_pair(unit, reserve_field, period):
 
 
 def _operating_state_id(input_unit, output_unit, period):
+    """Internal helper for MMS report construction."""
     rows = _series(output_unit.get("Operating-states"))
     if period >= len(rows) or not isinstance(rows[period], list) or not rows[period]:
         return None
@@ -86,6 +97,7 @@ def _operating_state_id(input_unit, output_unit, period):
 
 
 def build_dispatch_instructions(input_data, output_data):
+    """Build period-by-period dispatch instruction records for MMS consumers."""
     input_units = _filtered_input_units(input_data)
     output_units = output_data.get("Generating_Units", [])
     periods = _period_count(output_data)
@@ -148,15 +160,18 @@ def build_dispatch_instructions(input_data, output_data):
 
 
 def _reserve_coefficients(input_data, reserve_name, direction):
+    """Internal helper for MMS report construction."""
     return input_data.get("Other_coefficients", {}).get(f"{reserve_name}_{direction}", [])
 
 
 def _calculation_methods(input_data, direction):
+    """Internal helper for MMS report construction."""
     key = f"calculation-method_{direction}"
     return input_data.get("constraints", {}).get("APRR_calculations", {}).get(key, [])
 
 
 def _method_flag(methods, group, index=None):
+    """Internal helper for MMS report construction."""
     try:
         if index is None:
             value = methods[group]
@@ -168,6 +183,7 @@ def _method_flag(methods, group, index=None):
 
 
 def _coefficient(coefficients, group, index=None):
+    """Internal helper for MMS report construction."""
     try:
         if index is None:
             value = coefficients[group]
@@ -179,6 +195,7 @@ def _coefficient(coefficients, group, index=None):
 
 
 def _online_capacity_values(input_units, output_units, period):
+    """Internal helper for MMS report construction."""
     values = []
     for unit_index, input_unit in enumerate(input_units):
         if _unit_type(input_unit) != "thermal" or unit_index >= len(output_units):
@@ -191,6 +208,7 @@ def _online_capacity_values(input_units, output_units, period):
 
 
 def _reserve_requirement_breakdown(input_data, input_units, output_units, reserve_name, direction, period):
+    """Internal helper for MMS report construction."""
     coefficients = _reserve_coefficients(input_data, reserve_name, direction)
     methods = _calculation_methods(input_data, direction)
 
@@ -263,6 +281,7 @@ def _reserve_requirement_breakdown(input_data, input_units, output_units, reserv
 
 
 def build_reserve_monitoring_report(input_data, output_data, tolerance=1e-3):
+    """Recompute reserve requirements and compare them with solved provision."""
     input_units = _filtered_input_units(input_data)
     output_units = output_data.get("Generating_Units", [])
     periods = _period_count(output_data)
@@ -337,6 +356,7 @@ def build_reserve_monitoring_report(input_data, output_data, tolerance=1e-3):
 
 
 def build_res_curtailment_report(input_data, output_data):
+    """Summarize RES/PV available, dispatched, and curtailed energy."""
     input_units = _filtered_input_units(input_data)
     output_units = output_data.get("Generating_Units", [])
     periods = _period_count(output_data)
@@ -399,6 +419,7 @@ def build_res_curtailment_report(input_data, output_data):
 
 
 def build_mms_reports(input_data, output_data, tolerance=1e-3):
+    """Build all MMS-facing post-solve reports."""
     return {
         "Dispatch_Instructions": build_dispatch_instructions(input_data, output_data),
         "Reserve_Monitoring_Report": build_reserve_monitoring_report(

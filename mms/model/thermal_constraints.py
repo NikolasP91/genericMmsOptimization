@@ -1,3 +1,5 @@
+"""Thermal-unit ramping, availability, mode, forbidden-zone, and variable-cost constraints."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling kernel.
 
 import numpy as np
@@ -9,6 +11,7 @@ from mms.model.bounds import forbidden_zone_big_m
 
 
 def create_forbidden_zones_constraint(prob, objective_terms, input_data, power, data, intervals, CONV, M):
+    """Add thermal forbidden-zone disjunctions and relaxation penalties."""
     y_zone = [[[pl.LpVariable(f'y_zone_{i + 1}_{t}_{idx}', 0, 1, cat='Binary') for idx, _ in
                 enumerate(gen["forbidden_zones"])] for t in intervals] for i, gen in enumerate(data)]
     s_forbidden_zones_plus = [[pl.LpVariable(name=f's_forbidden_zones_plus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in
@@ -40,6 +43,7 @@ def create_forbidden_zones_constraint(prob, objective_terms, input_data, power, 
 
 
 def create_ramp_up_down_constraints(input_data, prob, power, data, intervals, objective_terms):
+    """Add thermal ramp-up and ramp-down constraints with relaxation variables."""
     ramp_relax = [[pl.LpVariable(name=f'ramp_relax_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
 
     for i, gen in enumerate(data):
@@ -52,6 +56,7 @@ def create_ramp_up_down_constraints(input_data, prob, power, data, intervals, ob
 
 
 def create_mustRun_constraints(prob, objective_terms, input_data, data, intervals, state):
+    """Add must-run unit constraints and their diagnostic slacks."""
     s_must_run = [[pl.LpVariable(name=f's_must_run_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     for gen in data:
         gen_id = gen["gen_id"]
@@ -64,6 +69,7 @@ def create_mustRun_constraints(prob, objective_terms, input_data, data, interval
 
 
 def create_variable_cost_curve_calculation_constraints(input_data, prob, objective_terms, power, data, intervals, M, state, CONV):
+    """Add thermal piecewise-linear variable production-cost constraints."""
     cost_multiplier = cost_curve_time_multiplier(input_data)
     u_1 = [[[] for _ in intervals] for _ in data]
     delta_ = [[[] for _ in intervals] for _ in data]
@@ -218,6 +224,7 @@ def create_variable_cost_curve_calculation_constraints(input_data, prob, objecti
 def create_power_state_baseline_deviations_calculation_constraints(input_data, prob, objective_terms, data, intervals, power, state,
                                                                    RDAS_power_df,
                                                                    RDAS_state_df, CONV, M):
+    """Add RDAS baseline deviation variables and penalties for legacy experiments."""
     deviation_1 = [[pl.LpVariable(name=f'dev_1_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in
                    enumerate(data)]
     deviation_2 = [[pl.LpVariable(name=f'dev_2_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in
@@ -249,6 +256,7 @@ def create_power_state_baseline_deviations_calculation_constraints(input_data, p
 
 
 def create_testing_mode_constraints(prob, objective_terms, input_data, data, power, intervals, CONV):
+    """Add testing-mode power constraints and violation slacks."""
     s_power_testing_mode_plus = [[pl.LpVariable(name=f's_power_testing_plus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
     s_power_testing_mode_minus = [[pl.LpVariable(name=f's_power_testing_minus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
 
@@ -265,6 +273,7 @@ def create_testing_mode_constraints(prob, objective_terms, input_data, data, pow
 
 def create_availability_program(prob, objective_terms, input_data, data, power, intervals, CONV):
     # s_avail = [[pl.LpVariable(name=f's_avail_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
+    """Add availability program constraints for conventional units."""
     for i in range(len(data)):
         for t in intervals[1:]:
             prob += power[i][t] <= data[i]["availability"][t-1]  # - s_avail[i][t]
@@ -276,6 +285,7 @@ def create_availability_program(prob, objective_terms, input_data, data, power, 
 
 
 def create_OOS_mode_constraints(prob, objective_terms, input_data, data, power, intervals, PV_no_SP):
+    """Add out-of-service mode constraints and violation slacks."""
     s_power_OOS_less_plus = [[pl.LpVariable(name=f's_power_OOS_less_plus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
     s_power_OOS_more_minus = [[pl.LpVariable(name=f's_power_OOS_more_minus_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, _ in enumerate(data)]
 

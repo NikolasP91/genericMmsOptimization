@@ -1,3 +1,5 @@
+"""Input validation rules for MMS optimization JSON files before model construction."""
+
 from mms.cost_curves import DEFAULT_COST_TIME_UNIT, audit_thermal_cost_curves
 from mms.penalties import audit_penalty_hierarchy
 
@@ -37,6 +39,7 @@ UNSUPPORTED_OPERATING_STATE_MAX_TRANSITION_FIELDS = (
 
 
 class InputValidationError(ValueError):
+    """Exception carrying structured validation errors and warnings."""
     def __init__(self, errors, warnings=None):
         self.errors = errors
         self.warnings = warnings or []
@@ -44,14 +47,17 @@ class InputValidationError(ValueError):
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _is_binary(value):
+    """Return whether a value is accepted as a binary input flag."""
     return value in (0, 1, False, True)
 
 
 def _check_numeric_list(errors, warnings, value, expected_len, path, *, allow_negative=False):
+    """Internal helper for input validation rules for mms optimization json files before model construction."""
     if not isinstance(value, list):
         errors.append(f"{path} must be a list.")
         return
@@ -65,6 +71,7 @@ def _check_numeric_list(errors, warnings, value, expected_len, path, *, allow_ne
 
 
 def validate_input_data(input_data):
+    """Validate the optimization input and return structured errors and warnings."""
     errors = []
     warnings = []
 
@@ -298,6 +305,7 @@ def validate_input_data(input_data):
 
 
 def assert_valid_input(input_data):
+    """Raise an InputValidationError when validation finds blocking errors."""
     report = validate_input_data(input_data)
     if report["errors"]:
         raise InputValidationError(report["errors"], report["warnings"])
@@ -305,6 +313,7 @@ def assert_valid_input(input_data):
 
 
 def format_input_validation_report(report):
+    """Render the validation report as console-readable text."""
     lines = [f"Input validation status: {report['status']}"]
     for warning in report.get("warnings", []):
         lines.append(f"[WARNING] {warning}")

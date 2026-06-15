@@ -1,3 +1,5 @@
+"""Soft-constraint slack extraction and penalty contribution reporting."""
+
 import re
 
 
@@ -5,28 +7,34 @@ DEFAULT_TOLERANCE = 1e-6
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _round(value, digits=6):
+    """Round a numeric value for JSON reports while preserving None."""
     return round(float(value), digits)
 
 
 def _cost_parameter(cost_parameters, key):
+    """Read a numeric cost parameter with a safe default."""
     value = cost_parameters.get(key, 0.0)
     return float(value) if _is_number(value) else 0.0
 
 
 def _numbers(value):
+    """Extract numeric values from a report cell or container."""
     return [int(item) for item in re.findall(r"\d+", str(value))]
 
 
 def _period_from_variable(variable):
+    """Internal helper for slack normalization."""
     parsed = _numbers(variable)
     return parsed[-1] if parsed else None
 
 
 def _unit_period_from_variable(variable):
+    """Internal helper for slack normalization."""
     parsed = _numbers(variable)
     if len(parsed) < 2:
         return None, _period_from_variable(variable)
@@ -34,6 +42,7 @@ def _unit_period_from_variable(variable):
 
 
 def _unit_state_period_from_variable(variable):
+    """Internal helper for slack normalization."""
     parsed = _numbers(variable)
     if len(parsed) < 3:
         unit_index, period = _unit_period_from_variable(variable)
@@ -42,6 +51,7 @@ def _unit_state_period_from_variable(variable):
 
 
 def _unit_from_to_period_from_variable(variable):
+    """Internal helper for slack normalization."""
     parsed = _numbers(variable)
     if len(parsed) < 4:
         unit_index, operating_state_id, period = _unit_state_period_from_variable(variable)
@@ -50,6 +60,7 @@ def _unit_from_to_period_from_variable(variable):
 
 
 def _is_dataframe(value):
+    """Internal helper for slack normalization."""
     return hasattr(value, "empty") and hasattr(value, "iterrows")
 
 
@@ -66,6 +77,7 @@ def _add_entry(
     period=None,
     tolerance=DEFAULT_TOLERANCE,
 ):
+    """Internal helper for slack normalization."""
     if not _is_number(value) or abs(float(value)) <= tolerance:
         return
     amount = float(value)
@@ -87,6 +99,7 @@ def _add_entry(
 
 
 def _add_variable_rows(entries, frame, family, penalty_key, penalty, parser, tolerance):
+    """Internal helper for slack normalization."""
     if not _is_dataframe(frame) or frame.empty or "Variable" not in frame or "Value" not in frame:
         return
     for _, row in frame.iterrows():
@@ -118,6 +131,7 @@ def _add_variable_rows(entries, frame, family, penalty_key, penalty, parser, tol
 
 
 def _add_matrix_rows(entries, frame, family, variable_prefix, penalty_key, penalty, tolerance):
+    """Internal helper for slack normalization."""
     if not _is_dataframe(frame) or frame.empty:
         return
     for row_label, row in frame.iterrows():
@@ -141,6 +155,7 @@ def _add_matrix_rows(entries, frame, family, variable_prefix, penalty_key, penal
 
 
 def _summarize(entries):
+    """Internal helper for slack normalization."""
     families = {}
     total = 0.0
     for entry in entries:
@@ -177,6 +192,7 @@ def _summarize(entries):
 
 
 def build_slack_penalty_report(input_data, slack_frames, tolerance=DEFAULT_TOLERANCE):
+    """Normalize nonzero soft-constraint slacks and their penalty costs."""
     cost_parameters = input_data.get("Cost_parameters", {})
     entries = []
 

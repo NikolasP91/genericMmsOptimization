@@ -1,3 +1,5 @@
+"""Regression tests for small known-answer benchmark cases."""
+
 import json
 import unittest
 from pathlib import Path
@@ -16,6 +18,7 @@ BENCHMARK_PATH = ROOT / "benchmarks" / "known_answer_cases.json"
 
 
 class KnownAnswerBenchmarkTests(unittest.TestCase):
+    """Checks small benchmark fixtures against hand-checkable expected behavior."""
     def test_known_answer_cases_validate_as_expected(self):
         with BENCHMARK_PATH.open(encoding="utf-8") as f:
             cases = json.load(f)

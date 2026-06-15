@@ -1,3 +1,5 @@
+"""RDAS/DS time-resolution preprocessing for sub-period operating-state behavior."""
+
 import copy
 import math
 
@@ -31,10 +33,12 @@ LARGE_TIME_SENTINEL = 100000000000
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _finite_positive_minutes(value):
+    """Return finite positive minute values and ignore open-ended sentinel values."""
     if not _is_number(value) or value <= 0 or value >= LARGE_TIME_SENTINEL:
         return None
     if value == float("inf") or math.isinf(float(value)):
@@ -43,6 +47,7 @@ def _finite_positive_minutes(value):
 
 
 def _time_resolution_options(input_data):
+    """Read optional policy switches controlling transient-state embedding."""
     options = input_data.get("optimization_parameters", {}).get("time_resolution", {})
     if not isinstance(options, dict):
         options = {}
@@ -56,10 +61,12 @@ def _time_resolution_options(input_data):
 
 
 def _state_role(operating_state):
+    """Normalize the state_role marker used to identify transient states."""
     return str(operating_state.get("state_role", "")).strip().lower()
 
 
 def _is_explicit_transient_state(operating_state, options):
+    """Return whether input data explicitly marks a state as transient."""
     return (
         operating_state.get("isTransient") is True
         or operating_state.get("time_resolution_class") == "transient"
@@ -68,6 +75,7 @@ def _is_explicit_transient_state(operating_state, options):
 
 
 def _timing_values_from_state(operating_state):
+    """Collect finite timing values declared directly on an operating state."""
     values = []
     for field in STATE_MIN_TIME_FIELDS + STATE_MAX_TIME_FIELDS:
         value = _finite_positive_minutes(operating_state.get(field))
@@ -77,6 +85,7 @@ def _timing_values_from_state(operating_state):
 
 
 def _transition_groups_by_from(unit):
+    """Index transition groups by their source operating-state id."""
     groups = {}
     for transition_group in unit.get("operating-state-transitions", []):
         groups[transition_group.get("from")] = transition_group
@@ -84,6 +93,7 @@ def _transition_groups_by_from(unit):
 
 
 def _incoming_transition_values(unit, state_id):
+    """Collect timing values on arcs entering a candidate transient state."""
     values = []
     for transition_group in unit.get("operating-state-transitions", []):
         from_state = transition_group.get("from")
@@ -98,6 +108,7 @@ def _incoming_transition_values(unit, state_id):
 
 
 def _outgoing_transition_values(unit, state_id):
+    """Collect timing values on arcs leaving a candidate transient state."""
     values = []
     transition_group = _transition_groups_by_from(unit).get(state_id, {})
     for transition in transition_group.get("transitions", []):
@@ -110,6 +121,7 @@ def _outgoing_transition_values(unit, state_id):
 
 
 def _timing_values_for_state(unit, operating_state):
+    """Collect all state and transition durations attached to one state."""
     state_id = operating_state.get("id")
     values = [(field, value, state_id, state_id) for field, value in _timing_values_from_state(operating_state)]
     values.extend(_incoming_transition_values(unit, state_id))
@@ -118,11 +130,13 @@ def _timing_values_for_state(unit, operating_state):
 
 
 def _transition_cost(transition):
+    """Read a transition cost as a number, defaulting missing costs to zero."""
     value = transition.get("transition-cost", 0)
     return float(value) if _is_number(value) else 0.0
 
 
 def _without_timing_fields(transition):
+    """Copy a transition while removing period-level timing fields."""
     cleaned = {
         key: copy.deepcopy(value)
         for key, value in transition.items()
@@ -134,6 +148,7 @@ def _without_timing_fields(transition):
 
 
 def _merge_embedded_transition(incoming, outgoing, transient_state, timing_values):
+    """Create a direct arc that carries the skipped transient state's metadata."""
     merged = _without_timing_fields(outgoing)
     merged["id"] = outgoing["id"]
     total_cost = _transition_cost(incoming) + _transition_cost(outgoing)
@@ -163,10 +178,12 @@ def _merge_embedded_transition(incoming, outgoing, transient_state, timing_value
 
 
 def _transition_exists(transitions, target_id):
+    """Return whether a target arc is already present in a transition list."""
     return any(transition.get("id") == target_id for transition in transitions)
 
 
 def _embed_state(unit, transient_state, timing_values):
+    """Remove one sub-period transient state and replace paths through it with direct arcs."""
     transient_id = transient_state["id"]
     groups_by_from = _transition_groups_by_from(unit)
     outgoing_group = groups_by_from.get(transient_id)
@@ -222,6 +239,7 @@ def _embed_state(unit, transient_state, timing_values):
 
 
 def _add_issue(report, severity, code, message, **fields):
+    """Append a structured time-resolution issue record to a report."""
     issue = {
         "severity": severity,
         "code": code,
@@ -232,6 +250,7 @@ def _add_issue(report, severity, code, message, **fields):
 
 
 def _record_subperiod_timing_issues(report, unit, time_granularity):
+    """Report timing data shorter than the active RDAS/DS dispatch period."""
     for operating_state in unit.get("operating-states", []):
         state_id = operating_state.get("id")
         for field, value in _timing_values_from_state(operating_state):
@@ -274,6 +293,7 @@ def _record_subperiod_timing_issues(report, unit, time_granularity):
 
 
 def prepare_operating_state_time_resolution(input_data):
+    """Classify and embed eligible sub-period transient states before time discretization."""
     time_granularity = input_data.get("Time_granularity")
     report = {
         "report_type": "time_resolution",
@@ -413,6 +433,7 @@ def prepare_operating_state_time_resolution(input_data):
 
 
 def _status_from_issues(report):
+    """Derive report status from warning/error severities."""
     severities = {issue.get("severity") for issue in report.get("issues", [])}
     if "error" in severities:
         return "failed"
@@ -422,6 +443,7 @@ def _status_from_issues(report):
 
 
 def _add_issue_counts(report):
+    """Attach issue severity counters to the time-resolution report."""
     issues = report.get("issues", [])
     report["issue_count"] = len(issues)
     report["warning_count"] = sum(1 for issue in issues if issue.get("severity") == "warning")

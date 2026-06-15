@@ -1,3 +1,5 @@
+"""Tests for post-solve parsing and output helper behavior."""
+
 import unittest
 
 import pandas as pd
@@ -6,6 +8,7 @@ from mms.postsolve import create_output_json_template, setpoint_calculation
 
 
 class PostsolveTests(unittest.TestCase):
+    """Checks post-solve parsing and output helpers."""
     def test_setpoint_calculation_includes_pv_rows(self):
         input_data = {"constraints": {"res_pv_dispatch_variables_constraints": True}}
         setpoint_df = pd.DataFrame(

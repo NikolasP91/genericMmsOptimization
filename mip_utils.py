@@ -1,3 +1,5 @@
+"""Numerical and model-building utilities shared by the PuLP MIP formulation."""
+
 import re
 import time
 import warnings
@@ -5,6 +7,7 @@ from contextlib import contextmanager
 
 
 def _collect_numeric_values(value):
+    """Recursively collect absolute numeric values from nested input data."""
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return [abs(value)]
     if isinstance(value, list):
@@ -21,6 +24,7 @@ def _collect_numeric_values(value):
 
 
 def estimate_big_m(input_data, data, intervals):
+    """Estimate a scenario-scaled fallback big-M from physical and cost magnitudes."""
     load_bound = max(_collect_numeric_values(input_data.get("Load_forecast", [])) or [0])
     availability_by_period = []
     for t in intervals[1:]:
@@ -63,6 +67,7 @@ def estimate_big_m(input_data, data, intervals):
 
 
 def _clean_name(value):
+    """Convert arbitrary text into a safe constraint-name fragment."""
     cleaned = re.sub(r"[^A-Za-z0-9_]+", "_", str(value).strip().lower())
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
     return cleaned or "section"
@@ -70,6 +75,7 @@ def _clean_name(value):
 
 @contextmanager
 def _suppress_pulp_constraint_mapping_warnings():
+    """Temporarily silence PuLP mapping deprecation warnings during constraint bookkeeping."""
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -167,6 +173,7 @@ class ConstraintBuildTracker:
 
 
 def name_auto_constraints(prob, prefix="mms_auto"):
+    """Assign stable names to any remaining anonymous PuLP constraints."""
     with _suppress_pulp_constraint_mapping_warnings():
         renamed = {}
         renamed_count = 0

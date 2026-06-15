@@ -1,3 +1,5 @@
+"""Operating-state variables, transitions, dwell-time, and timing constraints."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling kernel.
 
 import numpy as np
@@ -10,6 +12,7 @@ def create_operating_states_power_levels_constraints(input_data, prob, objective
     # u_2 = [[[pl.LpVariable(name=f'u_2_{i + 1}_{t}_{s_2_index}', lowBound=0, upBound=1, cat='Binary') for s_2_index, _ in
     #          enumerate(gen['operating-states'])] for t in intervals] for i, gen in enumerate(data)]
 
+    """Create operating-state binaries and link selected states to power limits."""
     u_2_dict = {}
     shutdown_states = {}
     for gen in data:
@@ -61,6 +64,7 @@ def create_operating_states_power_levels_constraints(input_data, prob, objective
 
 
 def create_allowed_operating_states_transition_constraints(prob, obj, data, intervals, u_2_dict, M):
+    """Add allowed operating-state transition arcs and transition costs."""
     transition_arc = {}
     for gen in data:
         gen_id = gen['gen_id']
@@ -101,6 +105,7 @@ def create_allowed_operating_states_transition_constraints(prob, obj, data, inte
 def _legacy_create_operating_state_max_time_constraints(prob, data, u_2_dict, IntervalCount, intervals, CONV, RES):
 
     #  περιορισμός μέγιστου συνεχόμενου χρόνου λειτουργίας στην αρχή του 24ώρου/15λέπτου κλπ
+    """Internal helper for operating-state variables, transitions, dwell-time, and timing constraints."""
     for gen in data:
         gen_id = gen['gen_id']
         if gen_id in CONV+RES:
@@ -121,6 +126,7 @@ def _legacy_create_operating_state_max_time_constraints(prob, data, u_2_dict, In
 
 
 def _finite_max_time(value, dispatch_period_count):
+    """Internal helper for operating-state variables, transitions, dwell-time, and timing constraints."""
     if value == float('inf'):
         return None
     limit = int(value)
@@ -130,6 +136,7 @@ def _finite_max_time(value, dispatch_period_count):
 
 
 def create_operating_state_max_time_constraints(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals, CONV, RES):
+    """Add optional soft maximum dwell-time constraints for operating states."""
     s_max_oper_state_time_left = {}
     s_max_oper_state_time_1 = {}
     for gen in data:
@@ -202,6 +209,7 @@ def create_operating_state_max_time_constraints(prob, objective_terms, input_dat
 
 
 def create_operating_state_max_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    """Add optional soft B-style maximum destination-state dwell constraints."""
     s_max_oper_state_time_b_left = {}
     s_max_oper_state_time_b_1 = {}
     for gen in data:
@@ -291,6 +299,7 @@ def create_operating_state_max_time_constraints_b(prob, objective_terms, input_d
 
 
 def create_operating_state_min_time_constraints_a(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    """Add optional soft A-style minimum source-state dwell constraints."""
     s_min_oper_state_time_a_left = {}
     s_min_oper_state_time_a_1 = {}
     for gen in data:
@@ -352,6 +361,7 @@ def create_operating_state_min_time_constraints_a(prob, objective_terms, input_d
 def create_operating_state_min_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
     # for gen in data:
     #     for s_2_index, _ in enumerate(data[i]["Therm_state_min_time_on"]):
+    """Add optional soft B-style minimum destination-state dwell constraints."""
     s_min_oper_state_time_b_left = {}
     s_min_oper_state_time_b_1 = {}
     for gen in data:
@@ -423,6 +433,7 @@ def create_operating_state_min_time_constraints_b(prob, objective_terms, input_d
 
 
 def create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals):
+    """Add source-state transition timing constraints with A-style slacks."""
     s_min_a_left = [[pl.LpVariable(name=f's_min_a_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     s_min_a_1 = [[pl.LpVariable(name=f's_min_a_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
 
@@ -476,6 +487,7 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
 
 
 def create_min_transition_time_between_states_constraints_b(prob,  objective_terms, input_data, data, u_2_dict, intervals):
+    """Add destination-state transition timing constraints with B-style slacks."""
     s_min_b_left = [[pl.LpVariable(name=f's_min_b_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     s_min_b_1 = [[pl.LpVariable(name=f's_min_b_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     import copy
@@ -522,6 +534,7 @@ def create_min_transition_time_between_states_constraints_b(prob,  objective_ter
 
 
 def create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown):
+    """Add online/offline minimum-time constraints using startup and shutdown variables."""
     s_min_state_b_left = [[pl.LpVariable(name=f's_min_state_b_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     s_min_state_b_1 = [[pl.LpVariable(name=f's_min_state_b_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
     import copy

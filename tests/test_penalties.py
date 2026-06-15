@@ -1,3 +1,5 @@
+"""Tests for soft-constraint penalty hierarchy auditing."""
+
 import unittest
 
 from mms.penalties import audit_penalty_hierarchy
@@ -41,6 +43,7 @@ def _valid_penalties():
 
 
 class PenaltyHierarchyTests(unittest.TestCase):
+    """Covers penalty coefficient validation and priority-order warnings."""
     def test_valid_penalty_hierarchy_passes(self):
         report = audit_penalty_hierarchy(_valid_penalties())
 

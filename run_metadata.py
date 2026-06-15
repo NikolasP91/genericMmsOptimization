@@ -1,3 +1,5 @@
+"""Run metadata and reproducibility hash helpers."""
+
 import hashlib
 import json
 import platform
@@ -7,6 +9,7 @@ from datetime import datetime, timezone
 
 
 def _module_version(module_name):
+    """Read an installed package version for run metadata."""
     try:
         module = __import__(module_name)
     except Exception:
@@ -15,6 +18,7 @@ def _module_version(module_name):
 
 
 def _git_value(args):
+    """Run a small git command and return its text value for metadata."""
     try:
         result = subprocess.run(
             ["git", *args],
@@ -28,11 +32,13 @@ def _git_value(args):
 
 
 def input_hash(input_data):
+    """Return a stable hash of the input payload for reproducibility tracking."""
     canonical = json.dumps(input_data, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def build_run_metadata(input_data, config_path, output_path, solver_name):
+    """Build reproducibility metadata for the current optimization run."""
     return {
         "run_started_at_utc": datetime.now(timezone.utc).isoformat(),
         "config_path": str(config_path),

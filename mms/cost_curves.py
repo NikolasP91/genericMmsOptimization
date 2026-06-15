@@ -1,3 +1,5 @@
+"""Thermal cost-curve preparation, audit, and post-solve cost reconstruction helpers."""
+
 THERMAL_PREFIX = "Therm"
 COST_CURVE_FIELD = "var_gen_cost(euro/MW)"
 QUADRATIC_COST_FIELD = "quadratic_cost_coefficients"
@@ -7,10 +9,12 @@ DEFAULT_QUADRATIC_SEGMENTS = 3
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _numeric_list(value):
+    """Internal helper for thermal cost-curve handling."""
     if not isinstance(value, list):
         return None
     if any(not _is_number(item) for item in value):
@@ -19,6 +23,7 @@ def _numeric_list(value):
 
 
 def _max_positive(value):
+    """Internal helper for thermal cost-curve handling."""
     if isinstance(value, list):
         numeric_values = [float(item) for item in value if _is_number(item)]
         return max(numeric_values) if numeric_values else 0.0
@@ -28,10 +33,12 @@ def _max_positive(value):
 
 
 def _unit_path(index):
+    """Internal helper for thermal cost-curve handling."""
     return f"Generating_Units[{index}].{COST_CURVE_FIELD}"
 
 
 def _add_issue(issues, severity, code, message, unit_index, gen_id=None, **fields):
+    """Append a structured issue record to a report."""
     issue = {
         "severity": severity,
         "code": code,
@@ -44,6 +51,7 @@ def _add_issue(issues, severity, code, message, unit_index, gen_id=None, **field
 
 
 def _unit_status(issues):
+    """Derive a per-unit cost-curve status from issue severities."""
     severities = {issue["severity"] for issue in issues}
     if "error" in severities:
         return "failed"
@@ -53,6 +61,7 @@ def _unit_status(issues):
 
 
 def _report_status(issues):
+    """Derive a report status from collected issue severities."""
     severities = {issue["severity"] for issue in issues}
     if "error" in severities:
         return "failed"
@@ -62,6 +71,7 @@ def _report_status(issues):
 
 
 def _cost_at_breakpoints(base_cost, segment_slopes, segment_widths):
+    """Internal helper for thermal cost-curve handling."""
     costs = [base_cost]
     running_cost = base_cost
     for slope, width in zip(segment_slopes, segment_widths):
@@ -71,6 +81,7 @@ def _cost_at_breakpoints(base_cost, segment_slopes, segment_widths):
 
 
 def _quadratic_coefficients(unit):
+    """Internal helper for thermal cost-curve handling."""
     coefficients = unit.get(QUADRATIC_COST_FIELD) or unit.get(LEGACY_QUADRATIC_COST_FIELD)
     if not isinstance(coefficients, dict):
         return None
@@ -84,10 +95,12 @@ def _quadratic_coefficients(unit):
 
 
 def _quadratic_cost(coefficients, power):
+    """Internal helper for thermal cost-curve handling."""
     return coefficients["a"] * power * power + coefficients["b"] * power + coefficients["c"]
 
 
 def _generation_config(input_data, unit):
+    """Internal helper for thermal cost-curve handling."""
     global_config = input_data.get("optimization_parameters", {}).get(
         "thermal_cost_curve_generation", {}
     )
@@ -101,6 +114,7 @@ def _generation_config(input_data, unit):
 
 
 def _generated_breakpoints(unit, config):
+    """Internal helper for thermal cost-curve handling."""
     explicit_breakpoints = config.get("breakpoints")
     numeric_breakpoints = _numeric_list(explicit_breakpoints)
     if numeric_breakpoints and len(numeric_breakpoints) >= 2:
@@ -243,6 +257,7 @@ def prepare_thermal_cost_curves(input_data):
 
 
 def is_non_decreasing(values, tolerance=1e-6):
+    """Return whether a numeric sequence is nondecreasing within tolerance."""
     return all(right + tolerance >= left for left, right in zip(values, values[1:]))
 
 
@@ -270,6 +285,7 @@ def cost_curve_time_multiplier(input_data):
 
 
 def parse_thermal_cost_curve(unit):
+    """Parse one unit's PWL curve into breakpoints, base cost, and marginal slopes."""
     curve = unit.get(COST_CURVE_FIELD, [[], []])
     if not isinstance(curve, list) or len(curve) != 2:
         return [], [], [], None
@@ -283,16 +299,19 @@ def parse_thermal_cost_curve(unit):
 
 
 def _as_list(value):
+    """Return the value when it is a list, otherwise an empty list."""
     return value if isinstance(value, list) else []
 
 
 def _value_at(values, index, default=0.0):
+    """Safely read a numeric value at an index with a default fallback."""
     if isinstance(values, list) and index < len(values) and _is_number(values[index]):
         return float(values[index])
     return default
 
 
 def _filtered_input_units(input_data):
+    """Return input units that survive the availability filter."""
     units = []
     for unit in input_data.get("Generating_Units", []):
         availability = unit.get("availability", 0)
@@ -305,6 +324,7 @@ def _filtered_input_units(input_data):
 
 
 def _period_count(output_data):
+    """Infer the number of dispatch periods represented in output data."""
     units = output_data.get("Generating_Units", [])
     if not units:
         return 0
@@ -312,6 +332,7 @@ def _period_count(output_data):
 
 
 def _segment_dispatch(power, state, breakpoints, widths):
+    """Internal helper for thermal cost-curve handling."""
     remaining = max(0.0, power - breakpoints[0] * state)
     dispatch = []
     for width in widths:
@@ -322,6 +343,7 @@ def _segment_dispatch(power, state, breakpoints, widths):
 
 
 def build_thermal_cost_report(input_data, output_data):
+    """Reconstruct solved thermal cost and segment dispatch by period."""
     input_units = _filtered_input_units(input_data)
     output_units = output_data.get("Generating_Units", [])
     periods = _period_count(output_data)

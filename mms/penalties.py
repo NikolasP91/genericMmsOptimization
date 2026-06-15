@@ -1,3 +1,5 @@
+"""Penalty hierarchy checks for soft-constraint coefficients."""
+
 PENALTY_FIELDS = (
     "x_load",
     "x_primary_APR_up",
@@ -33,10 +35,12 @@ PENALTY_FIELDS = (
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _add_issue(issues, severity, code, message, **fields):
+    """Append a structured issue record to a report."""
     issue = {
         "severity": severity,
         "code": code,
@@ -47,6 +51,7 @@ def _add_issue(issues, severity, code, message, **fields):
 
 
 def _status(issues):
+    """Derive an audit status from collected issue severities."""
     severities = {issue["severity"] for issue in issues}
     if "error" in severities:
         return "failed"
@@ -56,11 +61,13 @@ def _status(issues):
 
 
 def _value(values, key):
+    """Internal helper for penalty hierarchy checks for soft-constraint coefficients."""
     value = values.get(key)
     return float(value) if _is_number(value) else None
 
 
 def _check_at_least(issues, values, higher_key, lower_key, rationale):
+    """Internal helper for penalty hierarchy checks for soft-constraint coefficients."""
     higher = _value(values, higher_key)
     lower = _value(values, lower_key)
     if higher is None or lower is None:

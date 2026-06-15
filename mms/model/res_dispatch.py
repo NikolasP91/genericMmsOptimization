@@ -1,3 +1,5 @@
+"""RES/PV dispatch, setpoint, grid-capacity, and curtailment formulation pieces."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling kernel.
 
 import numpy as np
@@ -9,6 +11,7 @@ from mms.model.bounds import res_pv_dispatch_bounds, res_pv_unit_dispatch_bounds
 
 def create_res_pv_dispatch_variables_constraints(prob, objective_terms, input_data, power, state, data, intervals, UNITS, CONV, RES, PV, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, Load_forecast,
                                                  RES_forecast, RES_sum, M, s_power_minus):
+    """Build the legacy RES/PV dispatch-variable formulation."""
     setpoint = [[pl.LpVariable(name=f'setpoint{i + 1}_{t}', lowBound=0, upBound=1) for t in intervals] for i in range(len(data))]
     Min_grid_capacity_1 = [pl.LpVariable(name=f'Min_grid_capacity_1_{t}', lowBound=0, upBound=None) for t in intervals]  # for non-dispatchable res
     Min_grid_capacity_2 = [pl.LpVariable(name=f'Min_grid_capacity_2_{t}', lowBound=0, upBound=None) for t in intervals]
@@ -97,6 +100,7 @@ def create_res_pv_dispatch_variables_constraints(prob, objective_terms, input_da
 
 def create_res_pv_2_dispatch_variables_constraints(prob, objective_terms, input_data, power, state, data, intervals, UNITS, CONV, RES, PV, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, Load_forecast,
                                                  RES_forecast, RES_sum, M, s_power_minus):
+    """Build the active RES/PV dispatch and setpoint formulation."""
     setpoint = [[pl.LpVariable(name=f'setpoint{i + 1}_{t}', lowBound=0, upBound=1) for t in intervals] for i in range(len(data))]
     Min_grid_capacity_1 = [pl.LpVariable(name=f'Min_grid_capacity_1_{t}', lowBound=None, upBound=None) for t in intervals]  # for non-dispatchable res
     Min_grid_capacity_2 = [pl.LpVariable(name=f'Min_grid_capacity_2_{t}', lowBound=None, upBound=None) for t in intervals]

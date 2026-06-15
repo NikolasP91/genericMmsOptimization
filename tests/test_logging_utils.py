@@ -1,3 +1,5 @@
+"""Tests for console tee logging and structured JSON event logging."""
+
 import json
 import tempfile
 import unittest
@@ -9,6 +11,7 @@ from mms.logging_utils import JsonEventLogger, tee_output
 
 
 class LoggingUtilsTests(unittest.TestCase):
+    """Covers console tee output and JSON event logging utilities."""
     def test_tee_output_writes_console_text_to_log_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             log_path = Path(tmp) / "run_log.txt"

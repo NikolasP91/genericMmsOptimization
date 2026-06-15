@@ -1,3 +1,5 @@
+"""Tests for thermal cost-curve generation, audit, formulation, and reporting."""
+
 import copy
 import unittest
 
@@ -53,6 +55,7 @@ def _base_input():
 
 
 class ThermalCostCurveAuditTests(unittest.TestCase):
+    """Exercises thermal cost-curve generation, validation, formulation, and reporting paths."""
     def test_convex_incremental_curve_passes_and_reports_segments(self):
         report = audit_thermal_cost_curves(_base_input())
 

@@ -1,3 +1,5 @@
+"""Tests for input validation errors and warnings."""
+
 import copy
 import json
 import unittest
@@ -11,6 +13,7 @@ INPUT_PATH = ROOT / "v2.1_last_real_values_RDAS_60_FAT---test-case_BIOMASS.json"
 
 
 class InputValidationTests(unittest.TestCase):
+    """Checks input validation failures, warnings, and accepted project data."""
     def test_project_input_passes_validation(self):
         with INPUT_PATH.open(encoding="utf-8") as f:
             data = json.load(f)

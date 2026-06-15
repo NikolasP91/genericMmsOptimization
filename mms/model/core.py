@@ -1,3 +1,5 @@
+"""Core dispatch variables and system-level constraints for the MMS optimization model."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling kernel.
 
 import numpy as np
@@ -7,6 +9,7 @@ import pulp as pl
 
 def create_global_variables(prob, data, intervals):
     # Power output for each generator for each hour
+    """Create core dispatch, commitment, startup, shutdown, and RES aggregation variables."""
     power = [[pl.LpVariable(name=f'power_{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in
              enumerate(data)]
     # State for each generator for each hour
@@ -30,6 +33,7 @@ def create_global_variables(prob, data, intervals):
 
 
 def create_largest_online_capacity_bounds(prob, CONV, state, data, intervals):
+    """Create envelope variables for largest-online-unit reserve sizing terms."""
     largest_online_capacity = [
         pl.LpVariable(name=f'largest_online_capacity_{t}', lowBound=0, upBound=None)
         for t in intervals
@@ -66,6 +70,7 @@ def create_largest_online_capacity_bounds(prob, CONV, state, data, intervals):
 
 
 def produce_min_max_t(data, intervals):
+    """Expand scalar min/max power values into per-period arrays used by constraints."""
     k = len(intervals)-1
 
     for i, _ in enumerate(data):
@@ -79,6 +84,7 @@ def produce_min_max_t(data, intervals):
 
 def min_max_handling(prob, data, input_data, CONV, Partially_Controllable, on_AGC, intervals, u_1, state, power):
 
+    """Apply unit and operating-state min/max power limits before dispatch constraints are built."""
     if input_data["constraints"]["min_max_constraint"]:
         # only for dispatchable units check 5.2.4.4 Constraints paragraph in "Διακήρυξη" pdf
         for gen in data:
@@ -157,6 +163,7 @@ def min_max_handling(prob, data, input_data, CONV, Partially_Controllable, on_AG
 
 def create_res_sum_calculation_constraint(prob, power, intervals, RES_sum, RES, PV, Partially_Controllable):
     # Create RES_sum[t] calculation constraint
+    """Constrain the aggregate RES/PV production variable by period."""
     for t in intervals[0:]:
         prob += RES_sum[t] == pl.lpSum(power[i][t] for i in RES + PV + Partially_Controllable)
     return prob
@@ -166,6 +173,7 @@ def create_production_load_balance_constraint(prob, objective_terms, intervals, 
                                               x_load):
     # decision variables generation
     # production - load balance relaxation variable (need to increase load)
+    """Add load-balance equations and load slack penalties."""
     s_load_plus = [pl.LpVariable(name=f's_load_plus_{t}', lowBound=0, upBound=None) for t in intervals]
     # production - load balance relaxation variable (need to decrease load)
     s_load_minus = [pl.LpVariable(name=f's_load_minus_{t}', lowBound=0, upBound=None) for t in intervals]
@@ -181,6 +189,7 @@ def create_production_load_balance_constraint(prob, objective_terms, intervals, 
 
 
 def create_ensure_variables_correctness_constraint(prob, data, intervals, state, startup, shutdown):
+    """Link commitment, startup, and shutdown binaries across periods."""
     for i, gen in enumerate(data):
         for t in intervals[1:]:
             # we ensure the correctness of startup & shutdown values

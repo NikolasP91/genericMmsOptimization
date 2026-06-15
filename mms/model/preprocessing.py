@@ -1,6 +1,9 @@
+"""Pre-solve data preparation for unit filtering, categories, and time discretization."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling data preparation.
 
 def unit_categories(input_data, data):
+    """Classify units into conventional, RES, PV, setpoint, and controllable groups."""
     CONV = []
     RES = []
     PV = []
@@ -43,6 +46,7 @@ def unit_categories(input_data, data):
 
 def filter_generating_units(data):
     # Filters out generating units with no availability in every dispatch period.
+    """Remove units that have no availability over the modeled horizon."""
     filtered_units = []
     for unit in data:
         availability = unit.get("availability", 0)
@@ -54,6 +58,7 @@ def filter_generating_units(data):
     return filtered_units
 
 def round_to_best(a, b):
+    """Round a positive duration up to the nearest dispatch-period count."""
     if a == float('inf'):
         return 100000000000
     else:
@@ -64,10 +69,12 @@ def round_to_best(a, b):
 
 
 def round_min_time_to_periods(value, time_gran):
+    """Round minimum-time data up so minimum durations remain conservative."""
     return round_to_best(value, time_gran)
 
 
 def round_max_time_to_periods(value, time_gran):
+    """Round maximum-time data down so short maxima are not overstated."""
     if value == float('inf'):
         return 100000000000
     if value >= 100000000000:
@@ -77,6 +84,7 @@ def round_max_time_to_periods(value, time_gran):
 
 def time_granularity(data, time_gran):
     # Iterate over each generating unit in the data
+    """Convert minute-based timing parameters into dispatch-period counts."""
     for gen_unit in data["Generating_Units"]:
         for operating_state in gen_unit["operating-states"]:
             operating_state["min-time-enabled"] = round_min_time_to_periods(operating_state.get("min-time-enabled", 0), time_gran)

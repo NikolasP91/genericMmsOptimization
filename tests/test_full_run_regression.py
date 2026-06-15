@@ -1,3 +1,5 @@
+"""Full CLI regression test for the accepted biomass optimization case."""
+
 import json
 import subprocess
 import sys
@@ -11,6 +13,7 @@ CONFIG_FILE = ROOT / "v2.1_last_real_values_RDAS_60_FAT---test-case_BIOMASS.json
 
 
 class FullRunRegressionTests(unittest.TestCase):
+    """Runs the accepted biomass case through the CLI as an end-to-end regression."""
     def test_default_biomass_case_matches_known_solver_regression(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

@@ -1,3 +1,5 @@
+"""Backward-compatible facade for historical imports from the monolithic script name."""
+
 # Compatibility facade for the historical module name.
 # Active model algebra lives under mms/model, post-solve processing under mms/postsolve,
 # and workflow orchestration under mms/pipeline.

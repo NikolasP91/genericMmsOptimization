@@ -1,3 +1,5 @@
+"""Post-solve variable parsing, violation summaries, and legacy output assembly."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original post-solve processing.
 
 import re
@@ -7,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 def extract_numbers_4(item):
+    """Extract numbers 4 values from solver variable names or tables."""
     match = re.search(r'_(\d+)_(\d+)_(\d+)', item[0])
     generator_number = int(match.group(1))
     hour = int(match.group(2))
@@ -14,20 +17,24 @@ def extract_numbers_4(item):
     return generator_number, hour, n
 
 def extract_numbers(item):
+    """Extract numbers values from solver variable names or tables."""
     match = re.search(r'_(\d+)_(\d+)$', item[0])
     generator_number = int(match.group(1)) if match else 0
     hour = int(match.group(2)) if match else 0
     return generator_number, hour
 
 def extract_single_value(item):
+    """Extract single value values from solver variable names or tables."""
     match = re.search(r'_(\d+)$', item[0])
     value = int(match.group(1)) if match else 0
     return value
 
 def extract_all_numbers(item):
+    """Extract all numbers values from solver variable names or tables."""
     return tuple(int(value) for value in re.findall(r'\d+', item[0]))
 
 def extract_numbers_3(item):
+    """Extract numbers 3 values from solver variable names or tables."""
     match = re.search(r'_(\d+)_(\d+)_(\d+)_(\d+)$', item[0])
     unit = int(match.group(2)) if match else 0
     hour = int(match.group(3)) if match else 0
@@ -35,22 +42,26 @@ def extract_numbers_3(item):
     return unit, hour, level
 
 def extract_numbers_2(item):
+    """Extract numbers 2 values from solver variable names or tables."""
     match = re.search(r'(\d+)_(\d+)$', item[0])
     unit = int(match.group(1)) if match else 0
     hour = int(match.group(2)) if match else 0
     return unit, hour
 
 def extract_gen_hour(df):
+    """Extract gen hour values from solver variable names or tables."""
     df['Generator'], df['Hour'] = zip(*df['Variable'].map(lambda x: map(int, re.findall(r'\d+', x))))
     return df
 
 def pivot_df(df):
+    """Handle pivot df logic for post-solve variable parsing, violation summaries, and legacy output assembly."""
     return df.pivot(index='Generator', columns='Hour', values='Value')
 
 def solution_processing(solution, input_data):
     # solution data processing & manipulation
     # --------------------------------------------------------------------------------------------------------------------#
     # Create a dataframe containing the RDAS solution
+    """Parse PuLP variable names into structured DataFrames for post-solve reporting."""
     import re
     import pandas as pd
     start_time_2 = time.time()
@@ -883,6 +894,7 @@ def solution_processing(solution, input_data):
     )  # y_up_df, y_down_df,
 
 def setpoint_calculation(input_data, RES, PV, RES_forecast, Sum_RES_forecast, data, power_df, setpoint_df, state_df):
+    """Reconstruct RES/PV setpoints from dispatch and selector variables."""
     if input_data["constraints"]["res_pv_dispatch_variables_constraints"]:
 
         num_rows = len(RES_forecast)
@@ -975,6 +987,7 @@ def units_matrices(u_2_df, data):
     # import pandas as pd
 
     # Extract unit, row, and column indices
+    """Build per-unit operating-state matrices from parsed u_2 variables."""
     u_2_df[['unit', 'row', 'col']] = u_2_df['Variable'].str.extract(r'u_2_(\d+)_(\d+)_(\d+)')
 
     # Convert extracted strings to integers
@@ -994,6 +1007,7 @@ def units_matrices(u_2_df, data):
     return unit_matrices
 
 def matrices_to_dfs(unit_matrices):
+    """Convert operating-state matrices into DataFrames for legacy output assembly."""
     dfs = {}
     for key, matrix in unit_matrices.items():
         # Convert matrix to DataFrame
@@ -1011,6 +1025,7 @@ def matrices_to_dfs(unit_matrices):
     return dfs
 
 def load_curtailment(input_data, s_load_plus_df, s_load_minus_df):
+    """Compute load curtailment or augmentation from load slack variables."""
     LC = []
     LA = []
     if input_data["constraints"]["load_production_balance_constraint"] or input_data["constraints"]["load_production_Energy_balance_constraint"]:
@@ -1030,6 +1045,7 @@ def load_curtailment(input_data, s_load_plus_df, s_load_minus_df):
     return LC
 
 def APRR_violation(input_data, s_primary_APR_upwards_df, s_primary_APR_downwards_df, s_secondary_APR_upwards_df, s_secondary_APR_downwards_df, s_tertiary_APR_upwards_df, s_tertiary_APR_downwards_df):
+    """Extract reserve requirement violation arrays from APR slack variables."""
     primary_upwards_APRV = []
     primary_downwards_APRV = []
     if input_data["constraints"]["primary_active_power_reserves_constraint"]:
@@ -1089,6 +1105,7 @@ def APRR_violation(input_data, s_primary_APR_upwards_df, s_primary_APR_downwards
 
 def forbidden_zones_violations(input_data, s_forbidden_zones_plus_df, s_forbidden_zones_minus_df):
     # List to store (i-1, t) pairs
+    """Print or summarize forbidden zones violation slacks after solve."""
     fz_violated_constraints = []
     if input_data["constraints"]["forbidden_zones_constraint"]:
         # Iterate over each row of the dataframe
@@ -1134,6 +1151,7 @@ def forbidden_zones_violations(input_data, s_forbidden_zones_plus_df, s_forbidde
 
 def ramp_up_down_violations(input_data, ramp_relax_df):
     # List to store (i-1, t) pairs
+    """Print or summarize ramp up down violation slacks after solve."""
     ramp_up_down_violated_constraints = []
     if input_data["constraints"]["ramp_up_down_constraints"]:
         # Finding the positions of non-zero values
@@ -1146,6 +1164,7 @@ def ramp_up_down_violations(input_data, ramp_relax_df):
     return None
 
 def mustRun_violations(input_data, s_must_run_df):
+    """Print or summarize mustRun violation slacks after solve."""
     if input_data["constraints"]["must_run_units_constraint"]:
         # Finding the positions of non-zero values
         non_zero_positions = np.where(s_must_run_df > 0)
@@ -1156,6 +1175,7 @@ def mustRun_violations(input_data, s_must_run_df):
     return None
 
 def min_transition_time_between_states_constraints_a_violations(input_data, s_min_a_left_df, s_min_a_1_df):
+    """Print or summarize min transition time between states constraints a violation slacks after solve."""
     min_a_left_violated_constraints = []
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_a"]:
         # Iterate over each row of the dataframe
@@ -1208,6 +1228,7 @@ def min_transition_time_between_states_constraints_a_violations(input_data, s_mi
     return None
 
 def min_transition_time_between_states_constraints_b_violations(input_data, s_min_b_left_df, s_min_b_1_df):
+    """Print or summarize min transition time between states constraints b violation slacks after solve."""
     min_b_left_violated_constraints = []
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_b"]:
         # Iterate over each row of the dataframe
@@ -1266,6 +1287,7 @@ def operating_state_min_time_constraints_violations(
     s_min_oper_state_time_b_left_df,
     s_min_oper_state_time_b_1_df,
 ):
+    """Print or summarize operating state min time constraints violation slacks after solve."""
     def print_violations(frame, prefix, label):
         violated_constraints = []
         for index, row in frame.iterrows():
@@ -1323,6 +1345,7 @@ def operating_state_max_time_constraints_violations(
     s_max_oper_state_time_b_left_df,
     s_max_oper_state_time_b_1_df,
 ):
+    """Print or summarize operating state max time constraints violation slacks after solve."""
     def print_violations(frame, prefix, label, include_from_state=False):
         violated_constraints = []
         for index, row in frame.iterrows():
@@ -1391,6 +1414,7 @@ def operating_state_max_time_constraints_violations(
 
 
 def min_state_transition_constraints_b_violations(input_data, s_min_state_b_left_df,  s_min_state_b_1_df):
+    """Print or summarize min state transition constraints b violation slacks after solve."""
     if input_data["constraints"]["states_time_constraint"]:
         min_state_b_left_violated_constraints = []
         # Iterate over each row of the dataframe
@@ -1466,6 +1490,7 @@ def res_pv_constraints_violations(input_data, s_Grid_Capacity_1_df, s_Grid_Capac
     #     # Sort the list first by unit (i) and then by dispatch period (t)
     #     # Grid_Capacity_1_violated_constraints.sort(key=lambda x: (x[0]))
     #     # Print the warning message for each number in the sorted list
+    """Print or summarize res pv constraints violation slacks after solve."""
     if input_data["constraints"]["res_pv_dispatch_variables_constraints"]:
         Grid_Capacity_1_violated_constraints = set()  # Using a set to avoid duplicates
 
@@ -1536,6 +1561,7 @@ def res_pv_constraints_violations(input_data, s_Grid_Capacity_1_df, s_Grid_Capac
 
 def testing_mode_constraints_violations(input_data, s_power_testing_mode_plus_df, s_power_testing_mode_minus_df):
 
+    """Print or summarize testing mode constraints violation slacks after solve."""
     if input_data["constraints"]["testing_mode_constraints"]:
         # print(s_power_testing_mode_plus_df)
         # Finding the positions of non-zero values
@@ -1559,6 +1585,7 @@ def testing_mode_constraints_violations(input_data, s_power_testing_mode_plus_df
 
 def OOS_mode_constraints_violations(input_data, s_power_OOS_less_plus_df, s_power_OOS_more_minus_df):
 
+    """Print or summarize OOS mode constraints violation slacks after solve."""
     if input_data["constraints"]["OOS_mode_constraints"]:
         # Finding the positions of non-zero values
         non_zero_positions = np.where(s_power_OOS_less_plus_df.round(6) > 0)
@@ -1580,6 +1607,7 @@ def OOS_mode_constraints_violations(input_data, s_power_OOS_less_plus_df, s_powe
     return None
 
 def RES_PV_power_constraints_violations(s_power_plus_df, s_power_minus_df):
+    """Print or summarize RES PV power constraints violation slacks after solve."""
     non_zero_positions = np.where(s_power_plus_df.round(6) > 0)
     # Printing row and column information for each non-zero value
     if non_zero_positions:
@@ -1600,6 +1628,7 @@ def RES_PV_power_constraints_violations(s_power_plus_df, s_power_minus_df):
 
 def availability_violations(s_avail_values_df):
     # Convert all values to numeric, coercing errors to NaN
+    """Print or summarize availability violation slacks after solve."""
     s_avail_values_df = s_avail_values_df.apply(pd.to_numeric, errors='coerce')
     non_zero_positions = np.where(s_avail_values_df.round(6) > 0)
 
@@ -1619,6 +1648,7 @@ def output_json(data, input_data, json_template, power_df, Setpoints_df, unit_th
                 secondary_ActPR_plus_df, secondary_ActPR_minus_df, CONV, RES, PV, shutdown_df, startup_df,
                 primary_upwards_APRV, primary_downwards_APRV, secondary_upwards_APRV, secondary_downwards_APRV,
                 tertiary_upwards_APRV, tertiary_downwards_APRV):
+    """Assemble the legacy optimization output JSON payload."""
     data_output = {}
 
     data_output["Generating_Units"] = json_template
@@ -1716,6 +1746,7 @@ def output_json(data, input_data, json_template, power_df, Setpoints_df, unit_th
     return data_output
 
 def create_output_json_template(data, CONV, RES, PV, Partially_Controllable):
+    """Create the base output structure for each filtered generating unit."""
     json_template = []
     for i in range(len(data)):
         if i in CONV:

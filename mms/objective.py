@@ -1,3 +1,5 @@
+"""Post-solve objective-component reconstruction from model outputs and input data."""
+
 from mms.cost_curves import build_thermal_cost_report
 
 
@@ -24,18 +26,22 @@ RESERVE_VIOLATION_FIELDS = {
 
 
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _round(value, digits=6):
+    """Round a numeric value for JSON reports while preserving None."""
     return round(float(value), digits)
 
 
 def _as_list(value):
+    """Return the value when it is a list, otherwise an empty list."""
     return value if isinstance(value, list) else []
 
 
 def _value_at(values, index, default=0.0):
+    """Safely read a numeric value at an index with a default fallback."""
     values = _as_list(values)
     if index < len(values) and _is_number(values[index]):
         return float(values[index])
@@ -43,15 +49,18 @@ def _value_at(values, index, default=0.0):
 
 
 def _sum_numeric(values):
+    """Sum only numeric values from a sequence."""
     return sum(float(value) for value in _as_list(values) if _is_number(value))
 
 
 def _cost_parameter(cost_parameters, key):
+    """Read a numeric cost parameter with a safe default."""
     value = cost_parameters.get(key, 0.0)
     return float(value) if _is_number(value) else 0.0
 
 
 def _filtered_input_units(input_data):
+    """Return input units that survive the availability filter."""
     units = []
     for unit in input_data.get("Generating_Units", []):
         availability = unit.get("availability", 0)
@@ -64,6 +73,7 @@ def _filtered_input_units(input_data):
 
 
 def _unit_type(unit):
+    """Classify a unit from its comments field for report logic."""
     comments = unit.get("comments", "")
     if isinstance(comments, str) and comments.startswith("Therm"):
         return "thermal"
@@ -75,6 +85,7 @@ def _unit_type(unit):
 
 
 def _period_count(output_data):
+    """Infer the number of dispatch periods represented in output data."""
     units = output_data.get("Generating_Units", [])
     if not units:
         return 0
@@ -82,6 +93,7 @@ def _period_count(output_data):
 
 
 def _reserve_pair(unit, reserve_field, period):
+    """Read upward and downward reserve values for one unit and period."""
     values = unit.get(reserve_field, [])
     if not isinstance(values, list) or len(values) < 2:
         return 0.0, 0.0
@@ -89,6 +101,7 @@ def _reserve_pair(unit, reserve_field, period):
 
 
 def _cost_pair(unit, field):
+    """Read a two-sided reserve cost pair safely."""
     values = unit.get(field, [0.0, 0.0])
     if not isinstance(values, list) or len(values) < 2:
         return 0.0, 0.0
@@ -99,6 +112,7 @@ def _cost_pair(unit, field):
 
 
 def _selected_operating_state_id(input_unit, output_unit, period):
+    """Internal helper for objective reconstruction."""
     rows = _as_list(output_unit.get("Operating-states"))
     if period >= len(rows) or not isinstance(rows[period], list) or not rows[period]:
         return None
@@ -112,6 +126,7 @@ def _selected_operating_state_id(input_unit, output_unit, period):
 
 
 def _initial_operating_state_id(input_unit):
+    """Internal helper for objective reconstruction."""
     for state in _as_list(input_unit.get("operating-states")):
         if state.get("isEnabled"):
             return state.get("id")
@@ -119,6 +134,7 @@ def _initial_operating_state_id(input_unit):
 
 
 def _transition_cost(input_unit, from_state_id, to_state_id):
+    """Internal helper for objective reconstruction."""
     if from_state_id is None or to_state_id is None or from_state_id == to_state_id:
         return 0.0
     for transition in _as_list(input_unit.get("operating-state-transitions")):
@@ -132,6 +148,7 @@ def _transition_cost(input_unit, from_state_id, to_state_id):
 
 
 def _add_component(components, name, amount, unit="euro", source="reconstructed", note=None):
+    """Internal helper for objective reconstruction."""
     components.append(
         {
             "name": name,
@@ -144,6 +161,7 @@ def _add_component(components, name, amount, unit="euro", source="reconstructed"
 
 
 def build_objective_breakdown_report(input_data, output_data):
+    """Reconstruct observable objective components from the solved output."""
     input_units = _filtered_input_units(input_data)
     output_units = output_data.get("Generating_Units", [])
     periods = _period_count(output_data)

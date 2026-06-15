@@ -1,8 +1,12 @@
+"""Local bound calculations used to tighten MIP constraints and reduce big-M reliance."""
+
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def value_at(value, index, default=0.0):
+    """Handle value at logic for local bound calculations used to tighten mip constraints and reduce big-m reliance."""
     if isinstance(value, list):
         if 0 <= index < len(value) and _is_number(value[index]):
             return float(value[index])
@@ -13,6 +17,7 @@ def value_at(value, index, default=0.0):
 
 
 def reserve_activation_bound(unit, reserve_field, direction_index, period_index, operating_state=None):
+    """Handle reserve activation bound logic for local bound calculations used to tighten mip constraints and reduce big-m reliance."""
     reserve_limits = unit.get(reserve_field, [0.0, 0.0])
     reserve_cap = value_at(reserve_limits, direction_index, 0.0)
     availability = max(0.0, value_at(unit.get("availability", []), period_index, reserve_cap))
@@ -32,6 +37,7 @@ def reserve_activation_bound(unit, reserve_field, direction_index, period_index,
 
 
 def forbidden_zone_big_m(unit, zone, period_index, fallback_m):
+    """Handle forbidden zone big m logic for local bound calculations used to tighten mip constraints and reduce big-m reliance."""
     availability = max(0.0, value_at(unit.get("availability", []), period_index, fallback_m))
     lower = float(zone[0])
     upper = float(zone[1])
@@ -46,10 +52,12 @@ def forbidden_zone_big_m(unit, zone, period_index, fallback_m):
 
 
 def _sum_values(data, units, field, period_index):
+    """Sum numeric values while ignoring malformed entries."""
     return sum(max(0.0, value_at(data[index].get(field), period_index, 0.0)) for index in units)
 
 
 def res_pv_dispatch_bounds(input_data, data, CONV, RES_SP, PV_SP, RES_no_SP, PV_no_SP, Load_forecast, period):
+    """Handle res pv dispatch bounds logic for local bound calculations used to tighten mip constraints and reduce big-m reliance."""
     period_index = period - 1
     other = input_data.get("Other_coefficients", {})
     load = max(0.0, value_at(Load_forecast, period, 0.0))
@@ -82,6 +90,7 @@ def res_pv_dispatch_bounds(input_data, data, CONV, RES_SP, PV_SP, RES_no_SP, PV_
 
 
 def res_pv_unit_dispatch_bounds(unit, forecast, period_index, fallback_m):
+    """Handle res pv unit dispatch bounds logic for local bound calculations used to tighten mip constraints and reduce big-m reliance."""
     availability = max(0.0, value_at(unit.get("availability"), period_index, fallback_m))
     min_power = max(0.0, value_at(unit.get("min_power(MW)"), period_index, 0.0))
     forecast = max(0.0, float(forecast) if _is_number(forecast) else 0.0)

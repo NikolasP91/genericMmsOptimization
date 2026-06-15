@@ -1,3 +1,5 @@
+"""Behavioral tests for operating-state and unit time-constraint families."""
+
 import unittest
 
 import pulp as pl
@@ -80,6 +82,7 @@ def _sum_values(prob, prefix):
 
 
 class TimeConstraintScenarioTests(unittest.TestCase):
+    """Uses small forced schedules to verify timing-constraint families."""
     def test_state_minimum_time_slacks_cover_initial_startup_and_shutdown_windows(self):
         intervals = [0, 1, 2, 3, 4, 5]
         prob = pl.LpProblem("state_minimum_time_scenario", pl.LpMinimize)

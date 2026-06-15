@@ -1,3 +1,5 @@
+"""Tests for post-solve solution validation checks."""
+
 import unittest
 
 from solution_validation import validate_solution
@@ -46,6 +48,7 @@ def _base_output():
 
 
 class SolutionValidationTests(unittest.TestCase):
+    """Exercises post-solve feasibility and consistency validation checks."""
     def test_valid_solution_passes(self):
         report = validate_solution(_base_input(), _base_output())
         self.assertEqual(report["status"], "passed")

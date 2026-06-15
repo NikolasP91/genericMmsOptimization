@@ -1,17 +1,23 @@
+"""Post-solve validation checks for feasibility and output consistency."""
+
 def _is_number(value):
+    """Return whether a value is a non-boolean numeric scalar."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _as_list(value):
+    """Return the value when it is a list, otherwise an empty list."""
     return value if isinstance(value, list) else []
 
 
 def _max_abs(values):
+    """Return the largest absolute numeric value from an iterable."""
     numeric_values = [abs(value) for value in values if _is_number(value)]
     return max(numeric_values) if numeric_values else 0.0
 
 
 def _filtered_input_units(input_data):
+    """Return input units that survive the availability filter."""
     units = []
     for unit in input_data.get("Generating_Units", []):
         availability = unit.get("availability", 0)
@@ -24,6 +30,7 @@ def _filtered_input_units(input_data):
 
 
 def _add_check(checks, name, passed, detail, severity="error"):
+    """Internal helper for post-solve validation checks for feasibility and output consistency."""
     checks.append(
         {
             "name": name,
@@ -35,6 +42,7 @@ def _add_check(checks, name, passed, detail, severity="error"):
 
 
 def validate_solution(input_data, output_data, tolerance=1e-3):
+    """Validate solved output arrays and feasibility evidence against input data."""
     checks = []
     output_units = output_data.get("Generating_Units", [])
     input_units = _filtered_input_units(input_data)
@@ -288,6 +296,7 @@ def validate_solution(input_data, output_data, tolerance=1e-3):
 
 
 def format_validation_report(report):
+    """Render post-solve validation checks as console text."""
     lines = [f"Validation status: {report['status']}"]
     for check in report["checks"]:
         marker = "OK" if check["status"] == "passed" else check["severity"].upper()

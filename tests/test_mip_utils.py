@@ -1,3 +1,5 @@
+"""Tests for MIP utility helpers such as constraint naming."""
+
 import unittest
 import warnings
 
@@ -7,6 +9,7 @@ from mip_utils import ConstraintBuildTracker, name_auto_constraints
 
 
 class ConstraintBuildTrackerTests(unittest.TestCase):
+    """Checks constraint naming and build-tracking helpers."""
     def test_tracker_names_anonymous_constraints_by_section(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)

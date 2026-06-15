@@ -1,3 +1,5 @@
+"""Tests for MMS dispatch, reserve, and RES-curtailment reports."""
+
 import unittest
 
 from mms.reports import (
@@ -82,6 +84,7 @@ def _sample_output():
 
 
 class MmsReportTests(unittest.TestCase):
+    """Covers dispatch instructions, reserve monitoring, and RES curtailment reports."""
     def test_dispatch_instructions_are_created_per_unit_period(self):
         report = build_dispatch_instructions(_sample_input(), _sample_output())
         self.assertEqual(report["scope"], "DS")

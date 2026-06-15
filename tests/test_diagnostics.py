@@ -1,9 +1,12 @@
+"""Tests for warning and diagnostics report assembly."""
+
 import unittest
 
 from mms.diagnostics import build_diagnostics_report, build_warning_report
 
 
 class DiagnosticsTests(unittest.TestCase):
+    """Covers warning and diagnostics payload behavior for degraded runs."""
     def test_warning_report_collects_slacks_shortfalls_and_validation_failures(self):
         output_data = {
             "Solution_Status": "Optimal",

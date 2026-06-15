@@ -1,3 +1,5 @@
+"""Primary, secondary, and tertiary active-power reserve constraints."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original scheduling kernel.
 
 import numpy as np
@@ -11,6 +13,7 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
     # epsilon = 0.001
     # M=10000
     # decision variables generation
+    """Add primary active-power reserve provision and shortage constraints."""
     primary_ActPR_plus = [[pl.LpVariable(name=f'primary_ActPR_plus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
     primary_ActPR_minus = [[pl.LpVariable(name=f'primary_ActPR_minus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
     # primary_y_plus = [[pl.LpVariable(name=f'primary_y_plus_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
@@ -89,6 +92,7 @@ def create_primary_active_power_reserves_constraint(prob, input_data, objective_
 
 
 def create_secondary_active_power_reserves_constraint(prob, input_data, objective_terms, power, primary_ActPR_plus, primary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity):
+    """Add secondary active-power reserve provision and shortage constraints."""
     secondary_ActPR_plus = [[pl.LpVariable(name=f'secondary_ActPR_plus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
     secondary_ActPR_minus = [[pl.LpVariable(name=f'secondary_ActPR_minus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen in enumerate(data)]
     y_plus = [[pl.LpVariable(name=f'y_plus_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
@@ -177,6 +181,7 @@ def create_secondary_active_power_reserves_constraint(prob, input_data, objectiv
 
 
 def create_tertiary_active_power_reserves_constraint(prob, input_data, objective_terms, y_plus, y_minus, power, primary_ActPR_plus, primary_ActPR_minus, secondary_ActPR_plus, secondary_ActPR_minus, state, u_2_dict, data, intervals, on_AGC, RES_SP, RES_no_SP, PV_SP, PV_no_SP, Partially_Controllable, RES_sum, Load_forecast, M, PV, largest_online_capacity, largest_two_online_capacity):
+    """Add tertiary active-power reserve provision and shortage constraints."""
     tertiary_ActPR_plus = [
         [pl.LpVariable(name=f'tertiary_ActPR_plus{i + 1}_{t}', lowBound=0, upBound=None) for t in intervals] for i, gen
         in

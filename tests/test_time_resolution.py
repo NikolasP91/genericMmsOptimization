@@ -1,3 +1,5 @@
+"""Tests for RDAS/DS sub-period time-resolution preprocessing."""
+
 import copy
 import unittest
 
@@ -39,6 +41,7 @@ def _base_unit():
 
 
 class TimeResolutionPreprocessingTests(unittest.TestCase):
+    """Checks sub-period transient-state preprocessing and timing rounding rules."""
     def test_explicit_subperiod_transient_state_is_embedded_into_transition_arc(self):
         input_data = {
             "Time_granularity": 60,

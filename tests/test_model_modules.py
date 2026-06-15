@@ -1,3 +1,5 @@
+"""Boundary and algebra-unit tests for modular model-building helpers."""
+
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -29,6 +31,7 @@ from mms.model.problem import define_problem_and_solve_problem
 
 
 class ModelModuleBoundaryTests(unittest.TestCase):
+    """Exercises model-module helpers and protects modular algebra boundaries."""
     def test_main_script_uses_modular_problem_entry_point(self):
         self.assertIs(public_problem_entry, define_problem_and_solve_problem)
 

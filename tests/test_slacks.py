@@ -1,3 +1,5 @@
+"""Tests for normalized soft-constraint slack penalty reporting."""
+
 import unittest
 
 import pandas as pd
@@ -6,6 +8,7 @@ from mms.slacks import build_slack_penalty_report
 
 
 class SlackPenaltyReportTests(unittest.TestCase):
+    """Checks normalized reporting of priced slack variables."""
     def test_slack_penalty_report_combines_variable_and_matrix_sources(self):
         input_data = {
             "Cost_parameters": {

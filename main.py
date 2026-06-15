@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+"""Command-line entry point for loading, solving, validating, and exporting MMS runs."""
+
 import argparse
 import json
 import sys
@@ -32,6 +34,7 @@ DEFAULT_OUTPUT_FILE = "optimization_output.json"
 
 
 def parse_args():
+    """Parse command-line options for the MMS optimization runner."""
     parser = argparse.ArgumentParser(description="Run the MMS dispatch scheduling optimization.")
     parser.add_argument(
         "config",
@@ -90,6 +93,7 @@ def parse_args():
 
 
 def run(args):
+    """Execute one complete optimization run from input loading through artifact writing."""
     run_start = perf_counter()
     performance_stages = []
 
@@ -271,6 +275,7 @@ def run(args):
 
 
 def main():
+    """Run the CLI entry point with mirrored console logging enabled."""
     args = parse_args()
     with tee_output(args.log_file):
         return run(args)

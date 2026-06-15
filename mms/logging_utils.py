@@ -1,3 +1,5 @@
+"""Logging utilities for mirrored console output and structured run events."""
+
 import json
 import sys
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -6,6 +8,7 @@ from pathlib import Path
 
 
 class TeeStream:
+    """File-like stream that writes console output to multiple destinations."""
     def __init__(self, *streams):
         self.streams = streams
 
@@ -24,6 +27,7 @@ class TeeStream:
 
 @contextmanager
 def tee_output(log_path):
+    """Handle tee output logic for logging utilities for mirrored console output and structured run events."""
     if not log_path:
         yield
         return
@@ -38,6 +42,7 @@ def tee_output(log_path):
 
 
 class JsonEventLogger:
+    """Append-only JSONL logger for structured run milestone events."""
     def __init__(self, path):
         self.path = Path(path) if path else None
         if self.path is not None:
@@ -57,4 +62,5 @@ class JsonEventLogger:
 
 
 def null_event_logger():
+    """Handle null event logger logic for logging utilities for mirrored console output and structured run events."""
     return JsonEventLogger(None)

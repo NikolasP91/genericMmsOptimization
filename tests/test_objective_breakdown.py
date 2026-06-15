@@ -1,9 +1,12 @@
+"""Tests for post-solve objective reconstruction."""
+
 import unittest
 
 from mms.objective import build_objective_breakdown_report
 
 
 class ObjectiveBreakdownTests(unittest.TestCase):
+    """Checks objective-component reconstruction from solved outputs."""
     def test_objective_breakdown_reconstructs_observable_components(self):
         input_data = {
             "Time_granularity": 1,

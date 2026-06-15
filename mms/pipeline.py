@@ -1,3 +1,5 @@
+"""End-to-end optimization pipeline from prepared input to output JSON payload."""
+
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original optimization workflow.
 
 from time import perf_counter
@@ -31,6 +33,7 @@ from mms.postsolve import (
 from mms.slacks import build_slack_penalty_report
 
 def parse_and_execute_optimization(input_data):
+    """Build, solve, and post-process the optimization model for prepared input data."""
     pipeline_start = perf_counter()
     stage_timings = []
 

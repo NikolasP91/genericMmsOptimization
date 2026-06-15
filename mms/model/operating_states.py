@@ -98,7 +98,7 @@ def create_allowed_operating_states_transition_constraints(prob, obj, data, inte
     return prob, obj
 
 
-def create_operating_state_max_time_constraints(prob, data, u_2_dict, IntervalCount, intervals, CONV, RES):
+def _legacy_create_operating_state_max_time_constraints(prob, data, u_2_dict, IntervalCount, intervals, CONV, RES):
 
     #  περιορισμός μέγιστου συνεχόμενου χρόνου λειτουργίας στην αρχή του 24ώρου/15λέπτου κλπ
     for gen in data:
@@ -120,22 +120,283 @@ def create_operating_state_max_time_constraints(prob, data, u_2_dict, IntervalCo
     return prob
 
 
-def create_operating_state_min_time_constraints(prob, data, u_2_dict, IntervalCount, intervals):
+def _finite_max_time(value, dispatch_period_count):
+    if value == float('inf'):
+        return None
+    limit = int(value)
+    if limit <= 0 or limit >= dispatch_period_count:
+        return None
+    return limit
+
+
+def create_operating_state_max_time_constraints(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals, CONV, RES):
+    s_max_oper_state_time_left = {}
+    s_max_oper_state_time_1 = {}
+    for gen in data:
+        gen_id = gen['gen_id']
+        for operating_state in gen['operating-states']:
+            operating_state_id = operating_state['id']
+            for t in intervals:
+                s_max_oper_state_time_left[(gen_id, operating_state_id, t)] = pl.LpVariable(
+                    name=f's_max_oper_state_time_left_{gen_id + 1}_{operating_state_id}_{t}',
+                    lowBound=0,
+                    upBound=1,
+                    cat='Binary',
+                )
+                s_max_oper_state_time_1[(gen_id, operating_state_id, t)] = pl.LpVariable(
+                    name=f's_max_oper_state_time_1_{gen_id + 1}_{operating_state_id}_{t}',
+                    lowBound=0,
+                    upBound=1,
+                    cat='Binary',
+                )
+
+    dispatch_period_count = len(intervals) - 1
+    last_period = intervals[-1]
+    for gen in data:
+        gen_id = gen['gen_id']
+        for operating_state in gen['operating-states']:
+            operating_state_id = operating_state['id']
+            max_time_left = _finite_max_time(
+                operating_state.get("max-time-enabled-left", float('inf')),
+                dispatch_period_count,
+            )
+            max_time = _finite_max_time(
+                operating_state.get("max-time-enabled", float('inf')),
+                dispatch_period_count,
+            )
+
+            if max_time_left is not None and operating_state["isEnabled"]:
+                violation_period = max_time_left + 1
+                if violation_period <= last_period:
+                    prob += (
+                            pl.lpSum(
+                                u_2_dict[(gen_id, t, operating_state_id)]
+                                for t in intervals[1:violation_period + 1]
+                            )
+                            <= max_time_left
+                            + s_max_oper_state_time_left[(gen_id, operating_state_id, violation_period)]
+                    )
+
+            if max_time is not None:
+                for tt in intervals[1:]:
+                    violation_period = tt + max_time
+                    if violation_period > last_period:
+                        continue
+                    prob += (
+                            pl.lpSum(
+                                u_2_dict[(gen_id, t, operating_state_id)]
+                                for t in intervals[tt:violation_period + 1]
+                            )
+                            <= max_time
+                            + s_max_oper_state_time_1[(gen_id, operating_state_id, violation_period)]
+                    )
+
+            for t in intervals[1:]:
+                objective_terms += (
+                        s_max_oper_state_time_left[(gen_id, operating_state_id, t)]
+                        * input_data["Cost_parameters"]["x_max_oper_state_time_left"]
+                        + s_max_oper_state_time_1[(gen_id, operating_state_id, t)]
+                        * input_data["Cost_parameters"]["x_max_oper_state_time"]
+                )
+    return prob, objective_terms
+
+
+def create_operating_state_max_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    s_max_oper_state_time_b_left = {}
+    s_max_oper_state_time_b_1 = {}
+    for gen in data:
+        gen_id = gen['gen_id']
+        for allowed_transition in gen['operating-state-transitions']:
+            from_oper_state_id = allowed_transition['from']
+            for next_state in allowed_transition['transitions']:
+                next_state_id = next_state['id']
+                if from_oper_state_id == next_state_id:
+                    continue
+                for t in intervals:
+                    key = (gen_id, from_oper_state_id, next_state_id, t)
+                    s_max_oper_state_time_b_left[key] = pl.LpVariable(
+                        name=f's_max_oper_state_time_b_left_{gen_id + 1}_{from_oper_state_id}_{next_state_id}_{t}',
+                        lowBound=0,
+                        upBound=1,
+                        cat='Binary',
+                    )
+                    s_max_oper_state_time_b_1[key] = pl.LpVariable(
+                        name=f's_max_oper_state_time_b_1_{gen_id + 1}_{from_oper_state_id}_{next_state_id}_{t}',
+                        lowBound=0,
+                        upBound=1,
+                        cat='Binary',
+                    )
+
+    dispatch_period_count = len(intervals) - 1
+    last_period = intervals[-1]
+    for gen in data:
+        gen_id = gen['gen_id']
+        state_by_id = {
+            operating_state['id']: operating_state
+            for operating_state in gen['operating-states']
+        }
+        for allowed_transition in gen['operating-state-transitions']:
+            from_oper_state_id = allowed_transition['from']
+            for next_state in allowed_transition['transitions']:
+                next_state_id = next_state['id']
+                if from_oper_state_id == next_state_id:
+                    continue
+                max_time_left = _finite_max_time(
+                    next_state.get('max-transition-time-left_b', 100000000000),
+                    dispatch_period_count,
+                )
+                max_time = _finite_max_time(
+                    next_state.get('max-transition-time_b', 100000000000),
+                    dispatch_period_count,
+                )
+
+                if max_time_left is not None and state_by_id[next_state_id]["isEnabled"]:
+                    violation_period = max_time_left + 1
+                    if violation_period <= last_period:
+                        prob += (
+                                pl.lpSum(
+                                    u_2_dict[(gen_id, t, next_state_id)]
+                                    for t in intervals[1:violation_period + 1]
+                                )
+                                <= max_time_left
+                                + s_max_oper_state_time_b_left[
+                                    (gen_id, from_oper_state_id, next_state_id, violation_period)
+                                ]
+                        )
+
+                if max_time is not None:
+                    for tt in intervals[1:]:
+                        violation_period = tt + max_time
+                        if violation_period > last_period:
+                            continue
+                        prob += (
+                                pl.lpSum(
+                                    u_2_dict[(gen_id, t, next_state_id)]
+                                    for t in intervals[tt:violation_period + 1]
+                                )
+                                <= max_time + 1 - u_2_dict[(gen_id, tt - 1, from_oper_state_id)]
+                                + s_max_oper_state_time_b_1[
+                                    (gen_id, from_oper_state_id, next_state_id, violation_period)
+                                ]
+                        )
+
+                for t in intervals[1:]:
+                    objective_terms += (
+                            s_max_oper_state_time_b_left[(gen_id, from_oper_state_id, next_state_id, t)]
+                            * input_data["Cost_parameters"]["x_max_oper_state_time_b_left"]
+                            + s_max_oper_state_time_b_1[(gen_id, from_oper_state_id, next_state_id, t)]
+                            * input_data["Cost_parameters"]["x_max_oper_state_time_b"]
+                    )
+    return prob, objective_terms
+
+
+def create_operating_state_min_time_constraints_a(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
+    s_min_oper_state_time_a_left = {}
+    s_min_oper_state_time_a_1 = {}
+    for gen in data:
+        gen_id = gen['gen_id']
+        for operating_state in gen['operating-states']:
+            operating_state_id = operating_state['id']
+            for t in intervals:
+                s_min_oper_state_time_a_left[(gen_id, operating_state_id, t)] = pl.LpVariable(
+                    name=f's_min_oper_state_time_a_left_{gen_id + 1}_{operating_state_id}_{t}',
+                    lowBound=0,
+                    upBound=1,
+                    cat='Binary',
+                )
+                s_min_oper_state_time_a_1[(gen_id, operating_state_id, t)] = pl.LpVariable(
+                    name=f's_min_oper_state_time_a_1_{gen_id + 1}_{operating_state_id}_{t}',
+                    lowBound=0,
+                    upBound=1,
+                    cat='Binary',
+                )
+
+    for gen in data:
+        gen_id = gen['gen_id']
+        for operating_state in gen['operating-states']:
+            operating_state_id = operating_state['id']
+            min_time_left = int(operating_state["min-time-enabled-left"])
+            min_time = int(operating_state["min-time-enabled"])
+
+            for t in intervals[1:min_time_left + 1]:
+                prob += (
+                        u_2_dict[(gen_id, t, operating_state_id)]
+                        + s_min_oper_state_time_a_left[(gen_id, operating_state_id, t)]
+                        >= int(operating_state['isEnabled'])
+                )
+
+            if min_time > 0:
+                for tt in intervals[min_time_left + 1:]:
+                    entered_operating_state_now = (
+                            u_2_dict[(gen_id, tt, operating_state_id)]
+                            - u_2_dict[(gen_id, tt - 1, operating_state_id)]
+                    )
+                    for t_leave in intervals[tt + 1:min(tt + min_time, IntervalCount)]:
+                        prob += (
+                                u_2_dict[(gen_id, t_leave - 1, operating_state_id)]
+                                - u_2_dict[(gen_id, t_leave, operating_state_id)]
+                                <= 1 - entered_operating_state_now
+                                + s_min_oper_state_time_a_1[(gen_id, operating_state_id, t_leave)]
+                        )
+
+            for t in intervals[1:]:
+                objective_terms += (
+                        s_min_oper_state_time_a_left[(gen_id, operating_state_id, t)]
+                        * input_data["Cost_parameters"]["x_min_oper_state_time_a_left"]
+                        + s_min_oper_state_time_a_1[(gen_id, operating_state_id, t)]
+                        * input_data["Cost_parameters"]["x_min_oper_state_time_a"]
+                )
+    return prob, objective_terms
+
+
+def create_operating_state_min_time_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
     # for gen in data:
     #     for s_2_index, _ in enumerate(data[i]["Therm_state_min_time_on"]):
+    s_min_oper_state_time_b_left = {}
+    s_min_oper_state_time_b_1 = {}
+    for gen in data:
+        gen_id = gen['gen_id']
+        for operating_state in gen['operating-states']:
+            operating_state_id = operating_state['id']
+            for t in intervals:
+                s_min_oper_state_time_b_left[(gen_id, operating_state_id, t)] = pl.LpVariable(
+                    name=f's_min_oper_state_time_b_left_{gen_id + 1}_{operating_state_id}_{t}',
+                    lowBound=0,
+                    upBound=1,
+                    cat='Binary',
+                )
+                s_min_oper_state_time_b_1[(gen_id, operating_state_id, t)] = pl.LpVariable(
+                    name=f's_min_oper_state_time_b_1_{gen_id + 1}_{operating_state_id}_{t}',
+                    lowBound=0,
+                    upBound=1,
+                    cat='Binary',
+                )
+
     for gen in data:
         gen_id = gen['gen_id']
         for operating_state in gen['operating-states']:
             operating_state_id = operating_state['id']
 
-            prob += pl.lpSum(u_2_dict[(gen_id, t, operating_state_id)] for t in
-                             intervals[1:int(operating_state["min-time-enabled-left"]) + 1]) >= int(operating_state["min-time-enabled-left"]) * operating_state['isEnabled']
+            if operating_state["min-time-enabled-left"] > 0:
+                prob += (
+                        pl.lpSum(
+                            u_2_dict[(gen_id, t, operating_state_id)]
+                            + s_min_oper_state_time_b_left[(gen_id, operating_state_id, t)]
+                            for t in intervals[1:int(operating_state["min-time-enabled-left"]) + 1]
+                        )
+                        >= int(operating_state["min-time-enabled-left"]) * operating_state['isEnabled']
+                )
 
         #     Διαχρονικός περιορισμός λειτουργίας
         # for s_2_index, _ in enumerate(data[i]["Therm_state_min_time_on"]):
-            for tt in intervals[int(operating_state["min-time-enabled-left"] + 1):(IntervalCount - operating_state["min-time-enabled"] + 1)]:
-                prob += pl.lpSum(u_2_dict[(gen_id, t, operating_state_id)] for t in intervals[tt:(tt + operating_state["min-time-enabled"])]) >= \
-                        operating_state["min-time-enabled"] * (u_2_dict[(gen_id, tt, operating_state_id)] - u_2_dict[(gen_id, tt-1, operating_state_id)])
+            if operating_state["min-time-enabled"] > 0:
+                for tt in intervals[int(operating_state["min-time-enabled-left"] + 1):(IntervalCount - operating_state["min-time-enabled"] + 1)]:
+                    prob += pl.lpSum(
+                        u_2_dict[(gen_id, t, operating_state_id)]
+                        + s_min_oper_state_time_b_1[(gen_id, operating_state_id, t)]
+                        for t in intervals[tt:(tt + operating_state["min-time-enabled"])]
+                    ) >= \
+                            operating_state["min-time-enabled"] * (u_2_dict[(gen_id, tt, operating_state_id)] - u_2_dict[(gen_id, tt-1, operating_state_id)])
 
         # for s_2_index, _ in enumerate(data[i]["Therm_state_min_time_on"]):
         #     for tt in intervals[(intervalCount - data[i]["Therm_state_min_time_on"][s_2_index] + 1):]:
@@ -144,9 +405,21 @@ def create_operating_state_min_time_constraints(prob, data, u_2_dict, IntervalCo
 
             #     Διαχρονικός περιορισμός λειτουργίας στo τέλος του 24ώρου
 
-            for tt in intervals[(IntervalCount - operating_state["min-time-enabled"] + 1):]:
-                prob += pl.lpSum(u_2_dict[(gen_id, t, operating_state_id)] for t in intervals[tt:]) >= (u_2_dict[(gen_id, tt, operating_state_id)] - u_2_dict[(gen_id, tt-1, operating_state_id)]) * (IntervalCount - tt + 1)
-    return prob
+                for tt in intervals[(IntervalCount - operating_state["min-time-enabled"] + 1):]:
+                    prob += pl.lpSum(
+                        u_2_dict[(gen_id, t, operating_state_id)]
+                        + s_min_oper_state_time_b_1[(gen_id, operating_state_id, t)]
+                        for t in intervals[tt:]
+                    ) >= (u_2_dict[(gen_id, tt, operating_state_id)] - u_2_dict[(gen_id, tt-1, operating_state_id)]) * (IntervalCount - tt + 1)
+
+            for t in intervals[1:]:
+                objective_terms += (
+                        s_min_oper_state_time_b_left[(gen_id, operating_state_id, t)]
+                        * input_data["Cost_parameters"]["x_min_oper_state_time_b_left"]
+                        + s_min_oper_state_time_b_1[(gen_id, operating_state_id, t)]
+                        * input_data["Cost_parameters"]["x_min_oper_state_time_b"]
+                )
+    return prob, objective_terms
 
 
 def create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals):
@@ -246,73 +519,6 @@ def create_min_transition_time_between_states_constraints_b(prob,  objective_ter
         for t in intervals[1:]:
             objective_terms += s_min_b_left[gen_id][t] * input_data["Cost_parameters"]["x_min_transition_oper_states_b_left"] + s_min_b_1[gen_id][t] * input_data["Cost_parameters"]["x_min_transition_oper_states_b"]
     return prob,  objective_terms
-
-
-def create_max_transition_time_between_states_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals):
-    s_max_b_left = [[pl.LpVariable(name=f's_max_b_left_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
-    s_max_b_1 = [[pl.LpVariable(name=f's_max_b_1_{i + 1}_{t}', lowBound=0, upBound=1, cat='Binary') for t in intervals] for i, _ in enumerate(data)]
-    import copy
-    for gen in data:
-        gen_id = gen['gen_id']
-        # print('')
-        # print('gen_id: ', gen_id)
-        # for t in intervals[1:]:
-        # print('gen_id: ', gen_id)
-        for allowed_transition in gen['operating-state-transitions']:
-            from_oper_state_id = allowed_transition['from']
-            to_oper_states = copy.deepcopy(allowed_transition['transitions'])  # all allowed states to transition to
-            to_oper_states.append({'id': from_oper_state_id})  # also we can stay in the current state
-            # transition_data.append([from_oper_state_id, to_oper_states])
-            # print(transition_data)
-            # print('from: ', from_oper_state_id, 'to: ', to_oper_states)
-            # at this point we have 1 from id and 1 or more to ids
-
-            for next_state in to_oper_states:
-                next_state_id = next_state['id']  # there must be an operating state id when we define the "to" state
-                # print('id:', next_state_id)
-                if from_oper_state_id == next_state_id:
-                    pass
-                else:
-                    max_time_left = next_state.get('max-transition-time-left_b', float('inf'))  # if max-time key does not exist, use a very large number as the default value for max-time
-                    # Convert infinity to a large number for integer operations
-                    max_time_left = int(min(max_time_left, len(intervals))) if max_time_left != float('inf') else len(intervals)
-                    # if for any given time period in the beginning of the schedule we are in an operating state for more consecutive periods than max-time-left for
-                    # transition defines, then we cannot transit to that next specific operating state
-                    if (gen_id, max_time_left+1, next_state_id) in u_2_dict:
-
-                        prob += pl.lpSum(u_2_dict[(gen_id, t_prime, next_state_id)] for t_prime in intervals[1:max_time_left+2]) - max_time_left - s_max_b_left[gen_id][max_time_left+1] <= 0
-                        # we do not know for how many dispatch periods the respective constraint will be violated, we only know if it was violated or not at t = max_time_left + 1
-                        # objective_terms += s_max_b_left[gen_id][max_time_left+1] * 1000000
-                    # else:
-                    #     prob += pl.lpSum(u_2_dict[(gen_id, t_prime, next_state_id)] for t_prime in intervals[1:t + 2]) - t <= 0
-
-            for tt in intervals[1:]:  # Start from 1 as we compare with the previous interval
-                # Check if the generator entered the state at this interval
-                # entered_state_now = (u_2_dict[(gen_id, t, from_oper_state_id)] - u_2_dict[(gen_id, t-1, from_oper_state_id)])
-                for next_state in to_oper_states:  # there must be an operating state id when we define the "to" state
-                    next_state_id = next_state['id']  # there must be an operating state id when we define the "to" state
-                    if from_oper_state_id == next_state_id:
-                        pass
-                    else:
-                        max_time = next_state.get('max-transition-time_b', float('inf'))  # if max-time key does not exist, use a very large number as the default value for max-time
-                        # Convert infinity to a large number for integer operations
-                        max_time = int(min(max_time, len(intervals))) if max_time != float('inf') else len(intervals)
-                        if (gen_id, tt + max_time, next_state_id) in u_2_dict:  # if tt + max_time + 1 exceeds our time horizon do not enforce any relative constraint
-                            # print(tt + max_time + 1)
-                            # print(IntervalCount)
-                            # if we remain at a specific operational state ('to') more than max_time consecutive periods
-                            # then we can transit to this 'from' another specific state
-
-                            # we do not know for how many dispatch periods the respective constraint will be violated, we only know if it was violated or not at t = tt + max_time_left
-                            prob += (max_time + 1) - pl.lpSum(u_2_dict[(gen_id, t, next_state_id)] for t in intervals[tt: tt + max_time + 1]) >= u_2_dict[(gen_id, tt - 1, from_oper_state_id)] - s_max_b_1[gen_id][tt + max_time]
-                            # objective_terms += s_max_b_1[gen_id][tt + max_time] * 1000000
-                        else:
-                            pass
-
-        for t in intervals[1:]:
-            objective_terms += s_max_b_left[gen_id][t] * input_data["Cost_parameters"]["x_max_transition_oper_states_b_left"] + s_max_b_1[gen_id][t] * input_data["Cost_parameters"]["x_max_transition_oper_states_b"]
-
-    return prob, objective_terms
 
 
 def create_min_time_states_constraints_states(prob, objective_terms, input_data, data, state, intervals, startup, shutdown):

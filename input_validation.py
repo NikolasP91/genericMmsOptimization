@@ -30,6 +30,10 @@ RESERVE_FIELDS = (
     "Secondary_Active_Power_Reserves(MW)",
     "Tertiary_Active_Power_Reserves(MW)",
 )
+UNSUPPORTED_OPERATING_STATE_MAX_TRANSITION_FIELDS = (
+    "max-transition-time_a",
+    "max-transition-time-left_a",
+)
 
 
 class InputValidationError(ValueError):
@@ -174,6 +178,30 @@ def validate_input_data(input_data):
                     if operating_state["min-power"] > operating_state["max-power"]:
                         errors.append(f"{state_path}.min-power cannot exceed max-power.")
 
+        operating_state_transitions = unit.get("operating-state-transitions", [])
+        if isinstance(operating_state_transitions, list):
+            for transition_index, transition in enumerate(operating_state_transitions):
+                if not isinstance(transition, dict):
+                    continue
+                transitions = transition.get("transitions", [])
+                if not isinstance(transitions, list):
+                    continue
+                for target_index, target in enumerate(transitions):
+                    if not isinstance(target, dict):
+                        continue
+                    target_path = (
+                        f"{path}.operating-state-transitions[{transition_index}]"
+                        f".transitions[{target_index}]"
+                    )
+                    for field in UNSUPPORTED_OPERATING_STATE_MAX_TRANSITION_FIELDS:
+                        if field in target:
+                            warnings.append(
+                                f"{target_path}.{field} is ignored; A-style maximum "
+                                "operating-state transition-time constraints are not "
+                                "implemented. Use max-transition-time_b for B-style "
+                                "destination-state maximum timing when needed."
+                            )
+
     if len(gen_ids) != len(set(gen_ids)):
         errors.append("Generating unit gen_id values must be unique.")
     if gen_ids and sorted(gen_ids) != list(range(len(gen_ids))):
@@ -200,6 +228,7 @@ def validate_input_data(input_data):
         elif issue.get("severity") == "warning":
             warnings.append(message)
 
+    constraints = input_data.get("constraints", {})
     optimization_parameters = input_data.get("optimization_parameters", {})
     if not isinstance(optimization_parameters, dict):
         errors.append("optimization_parameters must be an object.")

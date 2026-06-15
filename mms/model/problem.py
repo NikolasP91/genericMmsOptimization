@@ -16,7 +16,10 @@ from mms.model.core import (
 )
 from mms.model.operating_states import (
     create_allowed_operating_states_transition_constraints,
-    create_max_transition_time_between_states_constraints_b,
+    create_operating_state_max_time_constraints,
+    create_operating_state_max_time_constraints_b,
+    create_operating_state_min_time_constraints_a,
+    create_operating_state_min_time_constraints_b,
     create_min_time_states_constraints_states,
     create_min_transition_time_between_states_constraints_a,
     create_min_transition_time_between_states_constraints_b,
@@ -209,8 +212,32 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     if input_data["constraints"]["allowed_thermal_states_transition_constraints"]:
         with build_tracker.section("allowed_operating_state_transitions"):
             prob, objective_terms = create_allowed_operating_states_transition_constraints(prob, objective_terms, data, intervals, u_2_dict, M) # u_2 --> u_2_dict done
-    # if input_data["constraints"]["operating_states_min_time_constraint"]:
-    #     prob = create_operating_state_min_time_constraints(prob, data, u_2_dict, IntervalCount, intervals) # u_2 --> u_2_dict
+    if input_data["constraints"].get("operating_states_max_time_constraint", False):
+        with build_tracker.section("operating_state_max_time"):
+            prob, objective_terms = create_operating_state_max_time_constraints(
+                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals, CONV, RES
+            )  # u_2 --> u_2_dict
+    if (
+        input_data["constraints"].get("operating_states_max_time_constraint_b", False)
+        or input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+    ):
+        with build_tracker.section("operating_state_max_time_b"):
+            prob, objective_terms = create_operating_state_max_time_constraints_b(
+                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
+            )  # u_2 --> u_2_dict
+    if input_data["constraints"].get("operating_states_min_time_constraint_a", False):
+        with build_tracker.section("operating_state_min_time_a"):
+            prob, objective_terms = create_operating_state_min_time_constraints_a(
+                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
+            )  # u_2 --> u_2_dict
+    if (
+        input_data["constraints"].get("operating_states_min_time_constraint_b", False)
+        or input_data["constraints"].get("operating_states_min_time_constraint", False)
+    ):
+        with build_tracker.section("operating_state_min_time_b"):
+            prob, objective_terms = create_operating_state_min_time_constraints_b(
+                prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals
+            )  # u_2 --> u_2_dict
     if input_data["constraints"]["operating_states_min_transition_time_between_states_constraint_a"]:
         with build_tracker.section("min_transition_time_between_states_a"):
             prob, objective_terms = create_min_transition_time_between_states_constraints_a(prob, objective_terms, input_data, data, u_2_dict, intervals)
@@ -265,13 +292,6 @@ def define_problem_and_solve_problem(data, input_data, UNITS, RES, PV, CONV, RES
     if input_data["constraints"]["OOS_mode_constraints"]:
         with build_tracker.section("oos_mode"):
             prob, objective_terms = create_OOS_mode_constraints(prob, objective_terms, input_data, data, power, intervals, PV_no_SP)
-    # if input_data["constraints"]["operating_states_max_time_constraints"]:
-    #     prob = create_operating_state_max_time_constraints(prob, data, u_2_dict, IntervalCount, intervals, CONV, RES)
-    # if input_data["constraints"]["operating_states_max_transition_time_between_states_constraint_a"]:
-    #     prob = create_max_transition_time_between_states_constraints_a(prob, data, u_2_dict, IntervalCount, intervals)
-    if input_data["constraints"]["operating_states_max_transition_time_between_states_constraint_b"]:
-        with build_tracker.section("max_transition_time_between_states_b"):
-            prob, objective_terms = create_max_transition_time_between_states_constraints_b(prob, objective_terms, input_data, data, u_2_dict, IntervalCount, intervals)
     if input_data["constraints"]["states_time_constraint"]:
         # print('--------- states --------')
         with build_tracker.section("state_minimum_time"):

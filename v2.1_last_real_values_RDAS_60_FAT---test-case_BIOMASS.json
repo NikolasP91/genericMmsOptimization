@@ -6,16 +6,22 @@
     "x_secondary_APR_up": 5000,
     "x_secondary_APR_down": 5000,
     "x_tertiary_APR_up": 3000,
-    "x_tertiary_APR_down": 300,
-    "x_forbidden_zones": 10000,
+    "x_tertiary_APR_down": 3000,
+    "x_forbidden_zones": 50000,
     "x_ramp": 10000,
     "x_must_run": 100000,
     "x_min_transition_oper_states_a": 10000,
     "x_min_transition_oper_states_a_left": 10000,
     "x_min_transition_oper_states_b": 10000,
     "x_min_transition_oper_states_b_left": 10000,
-    "x_max_transition_oper_states_b": 10000,
-    "x_max_transition_oper_states_b_left": 10000,
+    "x_max_oper_state_time": 10000,
+    "x_max_oper_state_time_left": 10000,
+    "x_max_oper_state_time_b": 10000,
+    "x_max_oper_state_time_b_left": 10000,
+    "x_min_oper_state_time_a": 10000,
+    "x_min_oper_state_time_a_left": 10000,
+    "x_min_oper_state_time_b": 10000,
+    "x_min_oper_state_time_b_left": 10000,
     "x_min_transition_states": 10000,
     "x_min_transition_states_left": 10000,
     "x_Grid_Capacity": 10000,
@@ -42,8 +48,11 @@
     "load_production_balance_constraint": true,
     "operating_states_min_transition_time_between_states_constraint_a": true,
     "operating_states_min_transition_time_between_states_constraint_b": true,
-    "operating_states_max_transition_time_between_states_constraint_b": true,
-    "states_time_constraint": false,
+    "operating_states_max_time_constraint": false,
+    "operating_states_max_time_constraint_b": false,
+    "operating_states_min_time_constraint_a": false,
+    "operating_states_min_time_constraint_b": false,
+    "states_time_constraint": true,
     "APRR_calculations": {
                           "calculation-method_upwards": [[1, 1], [0, 1], 0, 0],
                           "calculation-method_downwards": [[1, 1], [0, 1], 0, 0]
@@ -56,8 +65,8 @@
     "must_run_units_constraint": true,
     "allowed_thermal_states_transition_constraints": true,
     "res_pv_dispatch_variables_constraints": true,
-    "testing_mode_constraints": true,
-    "OOS_mode_constraints": true
+    "testing_mode_constraints": false,
+    "OOS_mode_constraints": false
   },
   "optimization_parameters": {
     "solver": "highs",
@@ -194,6 +203,16 @@
           "isShutdown": false,
           "isEnabled": true,
           "isOperational": true
+        },
+        {
+          "id": 5,
+          "state_role": "desynchronization",
+          "min-power": 1.6,
+          "max-power": 8.5,
+          "enabled-cost": 15,
+          "isShutdown": false,
+          "isEnabled": false,
+          "isOperational": false
         }
       ],
        "state-transitions": [
@@ -224,8 +243,7 @@
               "id": 3,
               "transition-cost": 800,
               "min-transition-time_a": 30,
-              "min-transition-time_b": 24,
-              "max-transition-time_b": 24
+              "min-transition-time_b": 24
             }
           ]
         },
@@ -240,8 +258,7 @@
               "id": 3,
               "transition-cost": 400,
               "min-transition-time_a": 6,
-              "min-transition-time_b": 12,
-              "max-transition-time_b": 12
+              "min-transition-time_b": 12
             }
           ]
         },
@@ -256,8 +273,7 @@
               "id": 3,
               "transition-cost": 200,
               "min-transition-time_a": 6,
-              "min-transition-time_b": 12,
-              "max-transition-time_b": 12
+              "min-transition-time_b": 12
             }
           ]
         },
@@ -274,9 +290,18 @@
           "from": 4,
           "transitions": [
             {
-              "id": 2,
+              "id": 5,
               "transition-cost": 100,
               "min-transition-time_a": 180
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "transitions": [
+            {
+              "id": 2,
+              "transition-cost": 0
             }
           ]
         }
@@ -403,6 +428,16 @@
           "isShutdown": false,
           "isEnabled": true,
           "isOperational": true
+        },
+        {
+          "id": 5,
+          "state_role": "desynchronization",
+          "min-power": 2.0,
+          "max-power": 4.0,
+          "enabled-cost": 10,
+          "isShutdown": false,
+          "isEnabled": false,
+          "isOperational": false
         }
       ],
        "state-transitions": [
@@ -430,8 +465,7 @@
               "id": 3,
               "transition-cost": 600,
               "min-transition-time_a": 4.8,
-              "min-transition-time_b": 12,
-              "max-transition-time_b": 12
+              "min-transition-time_b": 12
             }
           ]
         },
@@ -446,8 +480,7 @@
               "id": 3,
               "transition-cost": 300,
               "min-transition-time_a": 4.2,
-              "min-transition-time_b": 6,
-              "max-transition-time_b": 6
+              "min-transition-time_b": 6
             }
           ]
         },
@@ -461,8 +494,7 @@
             {
               "id": 3,
               "transition-cost": 150,
-              "min-transition-time_b": 6,
-              "max-transition-time_b": 6
+              "min-transition-time_b": 6
             }
           ]
         },
@@ -480,10 +512,19 @@
           "from": 4,
           "transitions": [
             {
-              "id": 2,
+              "id": 5,
               "transition-cost": 50,
               "min-transition-time_a": 300,
               "min-transition-time_b": 240
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "transitions": [
+            {
+              "id": 2,
+              "transition-cost": 0
             }
           ]
         }

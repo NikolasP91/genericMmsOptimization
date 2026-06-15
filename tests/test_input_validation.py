@@ -43,6 +43,43 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(report["status"], "failed")
         self.assertTrue(any("RTD" in error for error in report["errors"]))
 
+    def test_thermal_desynchronization_state_is_connected_nonoperational(self):
+        with INPUT_PATH.open(encoding="utf-8") as f:
+            data = json.load(f)
+
+        thermal_units = [
+            unit for unit in data["Generating_Units"]
+            if unit["comments"].startswith("Thermo:")
+        ]
+        self.assertGreaterEqual(len(thermal_units), 1)
+
+        for unit in thermal_units:
+            states = {state["id"]: state for state in unit["operating-states"]}
+            desync_state = next(
+                state for state in unit["operating-states"]
+                if state.get("state_role") == "desynchronization"
+            )
+            reference_state = states[3]
+
+            self.assertFalse(desync_state["isShutdown"])
+            self.assertFalse(desync_state["isOperational"])
+            self.assertEqual(reference_state["min-power"], desync_state["min-power"])
+            self.assertEqual(reference_state["max-power"], desync_state["max-power"])
+
+            operational_state = next(
+                state for state in unit["operating-states"] if state["isOperational"]
+            )
+            transitions = {
+                transition["from"]: transition["transitions"]
+                for transition in unit["operating-state-transitions"]
+            }
+            self.assertTrue(
+                any(target["id"] == desync_state["id"] for target in transitions[operational_state["id"]])
+            )
+            self.assertTrue(
+                any(states[target["id"]]["isShutdown"] for target in transitions[desync_state["id"]])
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,12 @@ RTD only as an external tender concept or as an explicitly unsupported run mode.
 It must not add an RTD optimizer, RTD execution loop, AGC base-point engine, or
 5-minute real-time redispatch workflow.
 
+Maximum operating-state timing is supported as an optional, data-driven layer:
+use the generic max dwell-time constraint for state-level limits and the B-style
+max timing constraint for destination-state limits after a transition. These
+constraints should remain inactive unless the specific scheduling case requires
+finite max-time data.
+
 ## Implementation Sequence
 
 1. Keep the current MIP kernel stable while extracting post-solve MMS artifacts.

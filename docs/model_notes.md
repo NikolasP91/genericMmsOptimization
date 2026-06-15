@@ -54,8 +54,8 @@ The active optimization algebra has been modularized under `mms/model/`:
   balance, and commitment startup/shutdown consistency.
 - `thermal_constraints.py`: thermal-unit ramping, must-run, forbidden-zone,
   availability, testing-mode, OOS-mode, and variable-cost-curve constraints.
-- `operating_states.py`: operating-state power levels, allowed transitions, and
-  minimum/maximum state-duration logic.
+- `operating_states.py`: operating-state power levels, allowed transitions,
+  minimum transition timing, and online/offline state-duration logic.
 - `reserves.py`: primary, secondary, and tertiary active-power reserve algebra.
 - `res_dispatch.py`: RES/PV dispatch, setpoint, grid-capacity, and curtailment
   variables.
@@ -260,8 +260,9 @@ both `RES_SP` and `PV_SP` units in the MIP.
 format with slack family, source variable, unit index when applicable, period,
 slack value, penalty coefficient key, and euro contribution. It currently covers
 load, reserve-shortage, ramp, grid-capacity, forbidden-zone, must-run,
-operating-state transition, state transition, testing-mode, OOS-mode, and
-RES/PV forecast-tracking slacks. The objective report includes an
+operating-state transition, optional operating-state minimum/maximum dwell-time,
+state transition, testing-mode, OOS-mode, and RES/PV forecast-tracking slacks.
+The objective report includes an
 `unreconstructed_or_rounding_residual` component equal to the solver objective
 minus reconstructed components, so any remaining hidden objective mass remains
 visible.
@@ -322,6 +323,45 @@ variables instead of big-M indicator-cost constraints. Each arc is tied to the
 previous and current operating-state binaries and carries its own transition
 cost in the objective. This is closer to a standard network-flow-style unit
 commitment transition formulation and removes a source of weak big-M relaxation.
+
+Maximum operating-state timing is implemented but optional. Use
+`operating_states_max_time_constraint` with finite `max-time-enabled` and
+`max-time-enabled-left` values when a state-specific maximum dwell time is
+needed. Use `operating_states_max_time_constraint_b` with finite
+`max-transition-time_b` and `max-transition-time-left_b` values when a
+transition-specific B-style destination-state maximum time is needed. These
+constraints are inactive unless the corresponding flags are enabled and the
+input provides finite max-time data. A-style maximum transition timing fields
+(`max-transition-time_a`, `max-transition-time-left_a`) are not implemented.
+
+The optional operating-state minimum dwell-time path is split into explicit A/B
+variants. `operating_states_min_time_constraint_a` limits early departures from
+the current/source operating state after entry. `operating_states_min_time_constraint_b`
+requires the unit to remain in the destination/current operating state after
+entry. In ordinary one-state-at-a-time commitment logic these are closely
+related, so enabling both is usually redundant and should be reserved for
+diagnostic experiments.
+
+The A slack variables are named
+`s_min_oper_state_time_a_left_{unit}_{state}_{t}` and
+`s_min_oper_state_time_a_1_{unit}_{state}_{t}`, with penalty keys
+`x_min_oper_state_time_a_left` and `x_min_oper_state_time_a`. The B slack
+variables are named `s_min_oper_state_time_b_left_{unit}_{state}_{t}` and
+`s_min_oper_state_time_b_1_{unit}_{state}_{t}`, with penalty keys
+`x_min_oper_state_time_b_left` and `x_min_oper_state_time_b`. The legacy
+unsuffixed `operating_states_min_time_constraint` flag is treated as B-style
+behavior for backward compatibility.
+
+Thermal/conventional desynchronization is represented as a separate connected
+but non-operational operating state. In the biomass test case this state uses
+`state_role: "desynchronization"`, `isShutdown: false`, `isOperational: false`,
+and the same active-power band as operating state `3`. This keeps the unit
+globally online while it ramps down and produces within the desynchronization
+band, but excludes it from reserve-capability calculations because reserve
+constraints only use `isOperational: true` operating states. The shutdown arc is
+therefore modeled as full operation -> desynchronization -> offline, so global
+shutdown costs are triggered only when the unit finally reaches an
+`isShutdown: true` state.
 
 Reserve requirement maxima are represented as lower envelopes: the APRR variable
 is constrained to be at least every active reserve-sizing expression. Because
@@ -432,7 +472,8 @@ but it protects the full DS execution path.
 - Add additional full optimization benchmark cases with known optimal schedules
   and objective values.
 - Add equation-level documentation for each constraint family.
-- Add deeper tests that compare ramping and operating-state behavior against
-  hand-computed expectations.
+- Add deeper tests that compare ramping, startup/shutdown timing, minimum
+  operating-state transition timing, and online/offline state-duration behavior
+  against hand-computed expectations.
 - Stochastic renewables, network constraints, and CI were intentionally left out
   of this implementation batch.

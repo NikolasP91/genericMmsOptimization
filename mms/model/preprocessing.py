@@ -83,11 +83,9 @@ def time_granularity(data, time_gran):
             for next_state in to_oper_states:
                 next_state['min-transition-time-left_a'] = round_to_best(next_state.get('min-transition-time-left_a', 0), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
                 next_state['min-transition-time_a'] = round_to_best(next_state.get('min-transition-time_a', 0), time_gran)
-                next_state['max-transition-time-left_a'] = round_to_best(next_state.get('max-transition-time-left_a', float('inf')), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
-                next_state['max-transition-time_a'] = round_to_best(next_state.get('max-transition-time_a', float('inf')), time_gran)
                 next_state['min-transition-time_b'] = round_to_best(next_state.get('min-transition-time_b', 0), time_gran)
-                next_state['min-transition-time-left_b'] = round_to_best(next_state.get('min-transition-time-left_b', 0), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time next_state['max-transition-time'] = round_to_best(next_state.get('max-transition-time', float('inf')),time_gran)
-                next_state['max-transition-time-left_b'] = round_to_best(next_state.get('max-transition-time-left_b', float('inf')), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
+                next_state['min-transition-time-left_b'] = round_to_best(next_state.get('min-transition-time-left_b', 0), time_gran)
+                next_state['max-transition-time-left_b'] = round_to_best(next_state.get('max-transition-time-left_b', float('inf')), time_gran)
                 next_state['max-transition-time_b'] = round_to_best(next_state.get('max-transition-time_b', float('inf')), time_gran)
             # gen_unit["time_Off_left"] = round_to_best(gen_unit["time_Off_left"], time_gran)
 

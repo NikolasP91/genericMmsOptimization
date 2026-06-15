@@ -24,6 +24,9 @@ def extract_single_value(item):
     value = int(match.group(1)) if match else 0
     return value
 
+def extract_all_numbers(item):
+    return tuple(int(value) for value in re.findall(r'\d+', item[0]))
+
 def extract_numbers_3(item):
     match = re.search(r'_(\d+)_(\d+)_(\d+)_(\d+)$', item[0])
     unit = int(match.group(2)) if match else 0
@@ -164,24 +167,71 @@ def solution_processing(solution, input_data):
     else:
         s_min_b_left_df = s_min_b_1_df = pd.DataFrame()
 
-    if input_data["constraints"]["operating_states_max_transition_time_between_states_constraint_b"]:
-        s_max_b_left_values = []
-        s_max_b_1_values = []
-
+    if input_data["constraints"].get("operating_states_max_time_constraint", False):
+        s_max_oper_state_time_left_values = []
+        s_max_oper_state_time_1_values = []
         for v in solution:
-            if v.name.startswith('s_max_b_left'):
-                s_max_b_left_values.append((v.name, v.varValue))
-            elif v.name.startswith('s_max_b_1'):
-                s_max_b_1_values.append((v.name, v.varValue))
-
-        s_max_b_left_values = sorted(s_max_b_left_values, key=extract_numbers)
-        s_max_b_1_values = sorted(s_max_b_1_values, key=extract_numbers)
-
-        s_max_b_left_df = pd.DataFrame(s_max_b_left_values, columns=['Variable', 'Value'])
-        s_max_b_1_df = pd.DataFrame(s_max_b_1_values, columns=['Variable', 'Value'])
+            if v.name.startswith('s_max_oper_state_time_left'):
+                s_max_oper_state_time_left_values.append((v.name, v.varValue))
+            elif v.name.startswith('s_max_oper_state_time_1'):
+                s_max_oper_state_time_1_values.append((v.name, v.varValue))
+        s_max_oper_state_time_left_values = sorted(s_max_oper_state_time_left_values, key=extract_all_numbers)
+        s_max_oper_state_time_1_values = sorted(s_max_oper_state_time_1_values, key=extract_all_numbers)
+        s_max_oper_state_time_left_df = pd.DataFrame(s_max_oper_state_time_left_values, columns=['Variable', 'Value'])
+        s_max_oper_state_time_1_df = pd.DataFrame(s_max_oper_state_time_1_values, columns=['Variable', 'Value'])
     else:
-        s_max_b_left_df = s_max_b_1_df = pd.DataFrame()
+        s_max_oper_state_time_left_df = s_max_oper_state_time_1_df = pd.DataFrame()
 
+    if (
+        input_data["constraints"].get("operating_states_max_time_constraint_b", False)
+        or input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+    ):
+        s_max_oper_state_time_b_left_values = []
+        s_max_oper_state_time_b_1_values = []
+        for v in solution:
+            if v.name.startswith('s_max_oper_state_time_b_left'):
+                s_max_oper_state_time_b_left_values.append((v.name, v.varValue))
+            elif v.name.startswith('s_max_oper_state_time_b_1'):
+                s_max_oper_state_time_b_1_values.append((v.name, v.varValue))
+        s_max_oper_state_time_b_left_values = sorted(s_max_oper_state_time_b_left_values, key=extract_all_numbers)
+        s_max_oper_state_time_b_1_values = sorted(s_max_oper_state_time_b_1_values, key=extract_all_numbers)
+        s_max_oper_state_time_b_left_df = pd.DataFrame(s_max_oper_state_time_b_left_values, columns=['Variable', 'Value'])
+        s_max_oper_state_time_b_1_df = pd.DataFrame(s_max_oper_state_time_b_1_values, columns=['Variable', 'Value'])
+    else:
+        s_max_oper_state_time_b_left_df = s_max_oper_state_time_b_1_df = pd.DataFrame()
+
+    if input_data["constraints"].get("operating_states_min_time_constraint_a", False):
+        s_min_oper_state_time_a_left_values = []
+        s_min_oper_state_time_a_1_values = []
+        for v in solution:
+            if v.name.startswith('s_min_oper_state_time_a_left'):
+                s_min_oper_state_time_a_left_values.append((v.name, v.varValue))
+            elif v.name.startswith('s_min_oper_state_time_a_1'):
+                s_min_oper_state_time_a_1_values.append((v.name, v.varValue))
+        s_min_oper_state_time_a_left_values = sorted(s_min_oper_state_time_a_left_values, key=extract_all_numbers)
+        s_min_oper_state_time_a_1_values = sorted(s_min_oper_state_time_a_1_values, key=extract_all_numbers)
+        s_min_oper_state_time_a_left_df = pd.DataFrame(s_min_oper_state_time_a_left_values, columns=['Variable', 'Value'])
+        s_min_oper_state_time_a_1_df = pd.DataFrame(s_min_oper_state_time_a_1_values, columns=['Variable', 'Value'])
+    else:
+        s_min_oper_state_time_a_left_df = s_min_oper_state_time_a_1_df = pd.DataFrame()
+
+    if (
+        input_data["constraints"].get("operating_states_min_time_constraint_b", False)
+        or input_data["constraints"].get("operating_states_min_time_constraint", False)
+    ):
+        s_min_oper_state_time_b_left_values = []
+        s_min_oper_state_time_b_1_values = []
+        for v in solution:
+            if v.name.startswith('s_min_oper_state_time_b_left'):
+                s_min_oper_state_time_b_left_values.append((v.name, v.varValue))
+            elif v.name.startswith('s_min_oper_state_time_b_1'):
+                s_min_oper_state_time_b_1_values.append((v.name, v.varValue))
+        s_min_oper_state_time_b_left_values = sorted(s_min_oper_state_time_b_left_values, key=extract_all_numbers)
+        s_min_oper_state_time_b_1_values = sorted(s_min_oper_state_time_b_1_values, key=extract_all_numbers)
+        s_min_oper_state_time_b_left_df = pd.DataFrame(s_min_oper_state_time_b_left_values, columns=['Variable', 'Value'])
+        s_min_oper_state_time_b_1_df = pd.DataFrame(s_min_oper_state_time_b_1_values, columns=['Variable', 'Value'])
+    else:
+        s_min_oper_state_time_b_left_df = s_min_oper_state_time_b_1_df = pd.DataFrame()
 
     if input_data["constraints"]["states_time_constraint"]:
         s_min_state_b_left_values = []
@@ -823,7 +873,11 @@ def solution_processing(solution, input_data):
         z_1_df, u_1_df, primary_ActPR_plus_df, primary_ActPR_minus_df, s_primary_APR_upwards_df, s_primary_APR_downwards_df, tertiary_ActPR_plus_df, tertiary_ActPR_minus_df, s_tertiary_APR_upwards_df,
         s_tertiary_APR_downwards_df, secondary_ActPR_plus_df, secondary_ActPR_minus_df, s_secondary_APR_upwards_df, s_secondary_APR_downwards_df, RES_sum_df,
         primary_APRR_df, binary_primary_df, tertiary_APRR_df, binary_tertiary_df, secondary_APRR_df, binary_secondary_df, u_2_df, setpoint_df, Min_grid_capacity_1_df, Min_grid_capacity_2_df, Min_Power_Calc_df, Grid_Capacity1_df, Grid_Capacity2_df, Grid_Capacity3_df, g1_df, g2_df, g3_df, g4_df,
-        m_df, y_zone_df, s_forbidden_zones_plus_df, s_forbidden_zones_minus_df, s_must_run_df, s_min_a_left_df, s_min_a_1_df, s_min_b_left_df, s_min_b_1_df, s_max_b_left_df, s_max_b_1_df,
+        m_df, y_zone_df, s_forbidden_zones_plus_df, s_forbidden_zones_minus_df, s_must_run_df, s_min_a_left_df, s_min_a_1_df, s_min_b_left_df, s_min_b_1_df,
+        s_max_oper_state_time_left_df, s_max_oper_state_time_1_df,
+        s_max_oper_state_time_b_left_df, s_max_oper_state_time_b_1_df,
+        s_min_oper_state_time_a_left_df, s_min_oper_state_time_a_1_df,
+        s_min_oper_state_time_b_left_df, s_min_oper_state_time_b_1_df,
         s_min_state_b_left_df, s_min_state_b_1_df, s_Grid_Capacity_1_df, s_Grid_Capacity_2_df, s_Grid_Capacity_3_df, s_power_testing_mode_plus_df, s_power_testing_mode_minus_df,
         s_power_plus_df, s_power_minus_df, N_1_df, N_2_df, P_RES_df, P_PV_df, s_avail_values_df, s_N_1_df, s_N_2_df, P_sp_df, g5_df, delta_df, s_power_OOS_less_plus_df, s_power_OOS_more_minus_df
     )  # y_up_df, y_down_df,
@@ -1205,62 +1259,136 @@ def min_transition_time_between_states_constraints_b_violations(input_data, s_mi
         print(' ')
     return None
 
-def max_transition_time_between_states_constraints_b_violations(input_data, s_max_b_left_df, s_max_b_1_df):
-    if input_data["constraints"]["operating_states_max_transition_time_between_states_constraint_b"]:
-        max_b_left_violated_constraints = []
-        # Iterate over each row of the dataframe
-        for index, row in s_max_b_left_df.iterrows():
+def operating_state_min_time_constraints_violations(
+    input_data,
+    s_min_oper_state_time_a_left_df,
+    s_min_oper_state_time_a_1_df,
+    s_min_oper_state_time_b_left_df,
+    s_min_oper_state_time_b_1_df,
+):
+    def print_violations(frame, prefix, label):
+        violated_constraints = []
+        for index, row in frame.iterrows():
             variable = row['Variable']
             value = row['Value']
-            # Check if the value is non-zero
             if value != 0:
-                # Extract i and t using regex
-                match = re.search(r's_max_b_left_(\d+)_(\d+)', variable)
+                match = re.search(rf'{prefix}_(\d+)_(\d+)_(\d+)', variable)
                 if match:
-                    i = match.group(1)  # Extract the first number as i
-                    t = match.group(2)  # Extract the second number as t
-                    max_b_left_violated_constraints.append((int(i) - 1, int(t)))
-        # Print the warning message
-        # Iterate over each row of the dataframe
-        # Remove duplicates by converting the list to a set and back to a list
-        max_b_left_violated_constraints = list(set(max_b_left_violated_constraints))
-        # Sort the list first by unit (i) and then by dispatch period (t)
-        max_b_left_violated_constraints.sort(key=lambda x: (x[0], x[1]))
-        # Print the warning message for each pair in the sorted list
-        for i, t in max_b_left_violated_constraints:
+                    i = int(match.group(1)) - 1
+                    operating_state_id = int(match.group(2))
+                    t = int(match.group(3))
+                    violated_constraints.append((i, operating_state_id, t))
+
+        violated_constraints = list(set(violated_constraints))
+        violated_constraints.sort(key=lambda x: (x[0], x[1], x[2]))
+        for i, operating_state_id, t in violated_constraints:
             print(
-                f"----- WARNING: max-time-b-left constraint violated for unit: {i}, dispatch period: {t} ----- ")
+                f"----- WARNING: operating-state {label} constraint violated "
+                f"for unit: {i}, operating state: {operating_state_id}, dispatch period: {t} ----- "
+            )
         print(' ')
 
-
-
-        max_b_1_violated_constraints = []
-        # Iterate over each row of the dataframe
-        for index, row in s_max_b_1_df.iterrows():
-            variable = row['Variable']
-            value = row['Value']
-            # Check if the value is non-zero
-            if value != 0:
-                # Extract i and t using regex
-                match = re.search(r's_max_b_1_(\d+)_(\d+)', variable)
-                if match:
-                    i = match.group(1)  # Extract the first number as i
-                    t = match.group(2)  # Extract the second number as t
-                    max_b_1_violated_constraints.append((int(i) - 1, int(t)))
-        # Print the warning message
-        # Iterate over each row of the dataframe
-        # Remove duplicates by converting the list to a set and back to a list
-        max_b_1_violated_constraints = list(set(max_b_1_violated_constraints))
-        # Sort the list first by unit (i) and then by dispatch period (t)
-        max_b_1_violated_constraints.sort(key=lambda x: (x[0], x[1]))
-        # Print the warning message for each pair in the sorted list
-        for i, t in max_b_1_violated_constraints:
-            print(
-                f"----- WARNING: max-time-b-1 constraint violated for unit: {i}, dispatch period: {t} ----- ")
-        print(' ')
-
-
+    if input_data["constraints"].get("operating_states_min_time_constraint_a", False):
+        print_violations(
+            s_min_oper_state_time_a_left_df,
+            "s_min_oper_state_time_a_left",
+            "min-time-a-left",
+        )
+        print_violations(
+            s_min_oper_state_time_a_1_df,
+            "s_min_oper_state_time_a_1",
+            "min-time-a",
+        )
+    if (
+        input_data["constraints"].get("operating_states_min_time_constraint_b", False)
+        or input_data["constraints"].get("operating_states_min_time_constraint", False)
+    ):
+        print_violations(
+            s_min_oper_state_time_b_left_df,
+            "s_min_oper_state_time_b_left",
+            "min-time-b-left",
+        )
+        print_violations(
+            s_min_oper_state_time_b_1_df,
+            "s_min_oper_state_time_b_1",
+            "min-time-b",
+        )
     return None
+
+
+def operating_state_max_time_constraints_violations(
+    input_data,
+    s_max_oper_state_time_left_df,
+    s_max_oper_state_time_1_df,
+    s_max_oper_state_time_b_left_df,
+    s_max_oper_state_time_b_1_df,
+):
+    def print_violations(frame, prefix, label, include_from_state=False):
+        violated_constraints = []
+        for index, row in frame.iterrows():
+            variable = row['Variable']
+            value = row['Value']
+            if value != 0:
+                if include_from_state:
+                    match = re.search(rf'{prefix}_(\d+)_(\d+)_(\d+)_(\d+)', variable)
+                    if match:
+                        i = int(match.group(1)) - 1
+                        from_operating_state_id = int(match.group(2))
+                        operating_state_id = int(match.group(3))
+                        t = int(match.group(4))
+                        violated_constraints.append((i, from_operating_state_id, operating_state_id, t))
+                else:
+                    match = re.search(rf'{prefix}_(\d+)_(\d+)_(\d+)', variable)
+                    if match:
+                        i = int(match.group(1)) - 1
+                        operating_state_id = int(match.group(2))
+                        t = int(match.group(3))
+                        violated_constraints.append((i, None, operating_state_id, t))
+
+        violated_constraints = list(set(violated_constraints))
+        violated_constraints.sort(key=lambda x: (x[0], x[1] if x[1] is not None else -1, x[2], x[3]))
+        for i, from_operating_state_id, operating_state_id, t in violated_constraints:
+            from_text = (
+                f", from operating state: {from_operating_state_id}"
+                if from_operating_state_id is not None
+                else ""
+            )
+            print(
+                f"----- WARNING: operating-state {label} constraint violated "
+                f"for unit: {i}{from_text}, operating state: {operating_state_id}, "
+                f"dispatch period: {t} ----- "
+            )
+        print(' ')
+
+    if input_data["constraints"].get("operating_states_max_time_constraint", False):
+        print_violations(
+            s_max_oper_state_time_left_df,
+            "s_max_oper_state_time_left",
+            "max-time-left",
+        )
+        print_violations(
+            s_max_oper_state_time_1_df,
+            "s_max_oper_state_time_1",
+            "max-time",
+        )
+    if (
+        input_data["constraints"].get("operating_states_max_time_constraint_b", False)
+        or input_data["constraints"].get("operating_states_max_transition_time_between_states_constraint_b", False)
+    ):
+        print_violations(
+            s_max_oper_state_time_b_left_df,
+            "s_max_oper_state_time_b_left",
+            "max-time-b-left",
+            include_from_state=True,
+        )
+        print_violations(
+            s_max_oper_state_time_b_1_df,
+            "s_max_oper_state_time_b_1",
+            "max-time-b",
+            include_from_state=True,
+        )
+    return None
+
 
 def min_state_transition_constraints_b_violations(input_data, s_min_state_b_left_df,  s_min_state_b_1_df):
     if input_data["constraints"]["states_time_constraint"]:

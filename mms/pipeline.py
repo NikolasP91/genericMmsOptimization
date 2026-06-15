@@ -13,11 +13,12 @@ from mms.postsolve import (
     forbidden_zones_violations,
     load_curtailment,
     matrices_to_dfs,
-    max_transition_time_between_states_constraints_b_violations,
     min_state_transition_constraints_b_violations,
     min_transition_time_between_states_constraints_a_violations,
     min_transition_time_between_states_constraints_b_violations,
     mustRun_violations,
+    operating_state_max_time_constraints_violations,
+    operating_state_min_time_constraints_violations,
     output_json,
     ramp_up_down_violations,
     res_pv_constraints_violations,
@@ -154,7 +155,11 @@ def parse_and_execute_optimization(input_data):
     primary_APRR_df, binary_primary_df, tertiary_APRR_df, binary_tertiary_df, secondary_APRR_df, binary_secondary_df, u_2_df, setpoint_df, Min_grid_capacity_1_df, Min_grid_capacity_2_df, Min_Power_Calc_df, Grid_Capacity1_df,
     Grid_Capacity2_df, Grid_Capacity3_df, g1_df, g2_df, g3_df, g4_df,
     m_df, y_zone_df, s_forbidden_zones_plus_df, s_forbidden_zones_minus_df, s_must_run_df, s_min_a_left_df,
-    s_min_a_1_df, s_min_b_left_df, s_min_b_1_df, s_max_b_left_df, s_max_b_1_df,
+    s_min_a_1_df, s_min_b_left_df, s_min_b_1_df,
+    s_max_oper_state_time_left_df, s_max_oper_state_time_1_df,
+    s_max_oper_state_time_b_left_df, s_max_oper_state_time_b_1_df,
+    s_min_oper_state_time_a_left_df, s_min_oper_state_time_a_1_df,
+    s_min_oper_state_time_b_left_df, s_min_oper_state_time_b_1_df,
     s_min_state_b_left_df, s_min_state_b_1_df, s_Grid_Capacity_1_df, s_Grid_Capacity_2_df, s_Grid_Capacity_3_df,
     s_power_testing_mode_plus_df, s_power_testing_mode_minus_df,
     s_power_plus_df, s_power_minus_df, N_1_df, N_2_df, P_RES_df, P_PV_df, s_avail_values_df, s_N_1_df, s_N_2_df, P_sp_df, g5_df, delta_df,
@@ -188,8 +193,14 @@ def parse_and_execute_optimization(input_data):
             "s_min_a_1": s_min_a_1_df,
             "s_min_b_left": s_min_b_left_df,
             "s_min_b_1": s_min_b_1_df,
-            "s_max_b_left": s_max_b_left_df,
-            "s_max_b_1": s_max_b_1_df,
+            "s_max_oper_state_time_left": s_max_oper_state_time_left_df,
+            "s_max_oper_state_time_1": s_max_oper_state_time_1_df,
+            "s_max_oper_state_time_b_left": s_max_oper_state_time_b_left_df,
+            "s_max_oper_state_time_b_1": s_max_oper_state_time_b_1_df,
+            "s_min_oper_state_time_a_left": s_min_oper_state_time_a_left_df,
+            "s_min_oper_state_time_a_1": s_min_oper_state_time_a_1_df,
+            "s_min_oper_state_time_b_left": s_min_oper_state_time_b_left_df,
+            "s_min_oper_state_time_b_1": s_min_oper_state_time_b_1_df,
             "s_min_state_b_left": s_min_state_b_left_df,
             "s_min_state_b_1": s_min_state_b_1_df,
             "s_power_testing_mode_plus": s_power_testing_mode_plus_df,
@@ -205,7 +216,20 @@ def parse_and_execute_optimization(input_data):
     mustRun_violations(input_data, s_must_run_df)
     min_transition_time_between_states_constraints_a_violations(input_data, s_min_a_left_df, s_min_a_1_df)
     min_transition_time_between_states_constraints_b_violations(input_data, s_min_b_left_df, s_min_b_1_df)
-    max_transition_time_between_states_constraints_b_violations(input_data, s_max_b_left_df, s_max_b_1_df)
+    operating_state_max_time_constraints_violations(
+        input_data,
+        s_max_oper_state_time_left_df,
+        s_max_oper_state_time_1_df,
+        s_max_oper_state_time_b_left_df,
+        s_max_oper_state_time_b_1_df,
+    )
+    operating_state_min_time_constraints_violations(
+        input_data,
+        s_min_oper_state_time_a_left_df,
+        s_min_oper_state_time_a_1_df,
+        s_min_oper_state_time_b_left_df,
+        s_min_oper_state_time_b_1_df,
+    )
     min_state_transition_constraints_b_violations(input_data, s_min_state_b_left_df, s_min_state_b_1_df)
     res_pv_constraints_violations(input_data, s_Grid_Capacity_1_df, s_Grid_Capacity_2_df, s_Grid_Capacity_3_df)
     testing_mode_constraints_violations(input_data, s_power_testing_mode_plus_df, s_power_testing_mode_minus_df)

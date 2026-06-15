@@ -33,26 +33,57 @@ def _unit_period_from_variable(variable):
     return parsed[-2] - 1, parsed[-1]
 
 
+def _unit_state_period_from_variable(variable):
+    parsed = _numbers(variable)
+    if len(parsed) < 3:
+        unit_index, period = _unit_period_from_variable(variable)
+        return unit_index, None, period
+    return parsed[-3] - 1, parsed[-2], parsed[-1]
+
+
+def _unit_from_to_period_from_variable(variable):
+    parsed = _numbers(variable)
+    if len(parsed) < 4:
+        unit_index, operating_state_id, period = _unit_state_period_from_variable(variable)
+        return unit_index, None, operating_state_id, period
+    return parsed[-4] - 1, parsed[-3], parsed[-2], parsed[-1]
+
+
 def _is_dataframe(value):
     return hasattr(value, "empty") and hasattr(value, "iterrows")
 
 
-def _add_entry(entries, family, variable, value, penalty_key, penalty, unit_index=None, period=None, tolerance=DEFAULT_TOLERANCE):
+def _add_entry(
+    entries,
+    family,
+    variable,
+    value,
+    penalty_key,
+    penalty,
+    unit_index=None,
+    from_operating_state_id=None,
+    operating_state_id=None,
+    period=None,
+    tolerance=DEFAULT_TOLERANCE,
+):
     if not _is_number(value) or abs(float(value)) <= tolerance:
         return
     amount = float(value)
-    entries.append(
-        {
-            "family": family,
-            "variable": str(variable),
-            "unit_index": unit_index,
-            "period": period,
-            "value": _round(amount),
-            "penalty_key": penalty_key,
-            "penalty_eur_per_unit": _round(penalty),
-            "cost_eur": _round(amount * penalty),
-        }
-    )
+    entry = {
+        "family": family,
+        "variable": str(variable),
+        "unit_index": unit_index,
+        "period": period,
+        "value": _round(amount),
+        "penalty_key": penalty_key,
+        "penalty_eur_per_unit": _round(penalty),
+        "cost_eur": _round(amount * penalty),
+    }
+    if operating_state_id is not None:
+        entry["operating_state_id"] = operating_state_id
+    if from_operating_state_id is not None:
+        entry["from_operating_state_id"] = from_operating_state_id
+    entries.append(entry)
 
 
 def _add_variable_rows(entries, frame, family, penalty_key, penalty, parser, tolerance):
@@ -61,7 +92,16 @@ def _add_variable_rows(entries, frame, family, penalty_key, penalty, parser, tol
     for _, row in frame.iterrows():
         variable = row["Variable"]
         value = row["Value"]
-        unit_index, period = parser(variable)
+        parsed = parser(variable)
+        if len(parsed) == 4:
+            unit_index, from_operating_state_id, operating_state_id, period = parsed
+        elif len(parsed) == 3:
+            unit_index, operating_state_id, period = parsed
+            from_operating_state_id = None
+        else:
+            unit_index, period = parsed
+            from_operating_state_id = None
+            operating_state_id = None
         _add_entry(
             entries,
             family,
@@ -70,6 +110,8 @@ def _add_variable_rows(entries, frame, family, penalty_key, penalty, parser, tol
             penalty_key,
             penalty,
             unit_index=unit_index,
+            from_operating_state_id=from_operating_state_id,
+            operating_state_id=operating_state_id,
             period=period,
             tolerance=tolerance,
         )
@@ -159,8 +201,14 @@ def build_slack_penalty_report(input_data, slack_frames, tolerance=DEFAULT_TOLER
         ("operating_state_min_transition_a", "s_min_a_1", "x_min_transition_oper_states_a", unit_period),
         ("operating_state_min_transition_b_left", "s_min_b_left", "x_min_transition_oper_states_b_left", unit_period),
         ("operating_state_min_transition_b", "s_min_b_1", "x_min_transition_oper_states_b", unit_period),
-        ("operating_state_max_transition_b_left", "s_max_b_left", "x_max_transition_oper_states_b_left", unit_period),
-        ("operating_state_max_transition_b", "s_max_b_1", "x_max_transition_oper_states_b", unit_period),
+        ("operating_state_max_time_left", "s_max_oper_state_time_left", "x_max_oper_state_time_left", _unit_state_period_from_variable),
+        ("operating_state_max_time", "s_max_oper_state_time_1", "x_max_oper_state_time", _unit_state_period_from_variable),
+        ("operating_state_max_time_b_left", "s_max_oper_state_time_b_left", "x_max_oper_state_time_b_left", _unit_from_to_period_from_variable),
+        ("operating_state_max_time_b", "s_max_oper_state_time_b_1", "x_max_oper_state_time_b", _unit_from_to_period_from_variable),
+        ("operating_state_min_time_a_left", "s_min_oper_state_time_a_left", "x_min_oper_state_time_a_left", _unit_state_period_from_variable),
+        ("operating_state_min_time_a", "s_min_oper_state_time_a_1", "x_min_oper_state_time_a", _unit_state_period_from_variable),
+        ("operating_state_min_time_b_left", "s_min_oper_state_time_b_left", "x_min_oper_state_time_b_left", _unit_state_period_from_variable),
+        ("operating_state_min_time_b", "s_min_oper_state_time_b_1", "x_min_oper_state_time_b", _unit_state_period_from_variable),
         ("state_min_transition_left", "s_min_state_b_left", "x_min_transition_states_left", unit_period),
         ("state_min_transition", "s_min_state_b_1", "x_min_transition_states", unit_period),
     ]

@@ -46,10 +46,15 @@ def parse_and_execute_optimization(input_data):
         )
 
     preprocessing_start = perf_counter()
+    # Read the original dispatch-period length in minutes before any timing values are converted.
     time_gran = input_data["Time_granularity"]
+    # First decide whether explicitly transient sub-period operating states should be embedded or kept.
     input_data = prepare_operating_state_time_resolution(input_data)
+    # Then convert all remaining minute-based timing fields into dispatch-period counts.
     input_data = time_granularity(input_data, time_gran)
+    # Read the generating-unit list after time-resolution preprocessing and timing conversion.
     data = input_data.get('Generating_Units', [])
+    # Remove units that have no availability in the modeled horizon.
     data = filter_generating_units(data)
     # print(data)
     RES_forecast = []

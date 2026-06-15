@@ -265,18 +265,25 @@ def validate_input_data(input_data):
     ):
         errors.append("optimization_parameters.cost_curve_time_multiplier must be a positive number.")
 
+    # Read the optional block that controls sub-period operating-state embedding.
     time_resolution = optimization_parameters.get("time_resolution", {})
+    # Allow the block to be omitted or explicitly null; validate it only when present.
     if time_resolution is not None:
+        # The time-resolution options must be a dictionary because the pipeline expects named switches.
         if not isinstance(time_resolution, dict):
             errors.append("optimization_parameters.time_resolution must be an object.")
         else:
+            # Decide whether sub-period operating states are embedded or merely rounded at period scale.
             policy = time_resolution.get("subperiod_operating_state_policy", "embed_transient")
+            # Only the two implemented policies are accepted.
             if policy not in ("embed_transient", "period_rounding"):
                 errors.append(
                     "optimization_parameters.time_resolution.subperiod_operating_state_policy "
                     "must be 'embed_transient' or 'period_rounding'."
                 )
+            # Read optional semantic labels that identify explicit transient operating states.
             roles = time_resolution.get("transient_state_roles")
+            # Roles must be strings so the preprocessing logic can compare normalized names safely.
             if roles is not None and (
                 not isinstance(roles, list)
                 or any(not isinstance(role, str) or not role for role in roles)
@@ -284,11 +291,13 @@ def validate_input_data(input_data):
                 errors.append(
                     "optimization_parameters.time_resolution.transient_state_roles must be a list of strings."
                 )
+            # Validate the three safety switches that allow otherwise protected state classes to be embedded.
             for field in (
                 "allow_initial_state_embedding",
                 "allow_operational_state_embedding",
                 "allow_shutdown_state_embedding",
             ):
+                # Each switch must be boolean because non-boolean truthiness would make bypass decisions ambiguous.
                 if field in time_resolution and not isinstance(time_resolution[field], bool):
                     errors.append(f"optimization_parameters.time_resolution.{field} must be boolean.")
 

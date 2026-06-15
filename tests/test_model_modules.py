@@ -15,9 +15,6 @@ from mms.model.bounds import (
 )
 from mms.model.operating_states import (
     create_operating_state_max_transition_time_between_states_constraints_b,
-    create_operating_state_max_time_constraints,
-    create_operating_state_min_time_constraints,
-    create_operating_state_min_time_constraints_a,
 )
 from mms.model.preprocessing import (
     filter_generating_units,
@@ -138,67 +135,14 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         self.assertEqual(2, round_min_time_to_periods(61, 60))
         self.assertEqual(1, round_max_time_to_periods(61, 60))
 
-    def test_operating_state_min_time_slacks_follow_project_naming(self):
-        intervals = [0, 1, 2]
-        data = [
-            {
-                "gen_id": 0,
-                "operating-states": [
-                    {
-                        "id": 4,
-                        "isEnabled": True,
-                        "min-time-enabled-left": 1,
-                        "min-time-enabled": 2,
-                    }
-                ],
-            }
-        ]
-        u_2_dict = {
-            (0, t, 4): pl.LpVariable(f"u_2_1_{t}_4", lowBound=0, upBound=1, cat="Binary")
-            for t in intervals
-        }
-        prob = pl.LpProblem("state_min_time_slack_naming")
-        input_data = {
-            "Cost_parameters": {
-                "x_min_oper_state_time_a_left": 10000,
-                "x_min_oper_state_time_a": 10000,
-                "x_min_oper_state_time_b_left": 10000,
-                "x_min_oper_state_time_b": 10000,
-            }
-        }
-
-        prob, objective_terms = create_operating_state_min_time_constraints_a(
-            prob, 0, input_data, data, u_2_dict, len(intervals), intervals
-        )
-        prob, objective_terms = create_operating_state_min_time_constraints(
-            prob, objective_terms, input_data, data, u_2_dict, len(intervals), intervals
-        )
-        prob += objective_terms
-        variable_names = {variable.name for variable in prob.variables()}
-
-        self.assertIn("s_min_oper_state_time_a_left_1_4_1", variable_names)
-        self.assertIn("s_min_oper_state_time_a_1_1_4_2", variable_names)
-        self.assertIn("s_min_oper_state_time_b_left_1_4_1", variable_names)
-        self.assertIn("s_min_oper_state_time_b_1_1_4_2", variable_names)
-
-    def test_operating_state_max_time_slacks_follow_project_naming(self):
+    def test_operating_state_max_transition_b_slacks_follow_project_naming(self):
         intervals = [0, 1, 2, 3]
         data = [
             {
                 "gen_id": 0,
                 "operating-states": [
-                    {
-                        "id": 4,
-                        "isEnabled": True,
-                        "max-time-enabled-left": 1,
-                        "max-time-enabled": 2,
-                    },
-                    {
-                        "id": 5,
-                        "isEnabled": False,
-                        "max-time-enabled-left": 100000000000,
-                        "max-time-enabled": 100000000000,
-                    },
+                    {"id": 4, "isEnabled": True},
+                    {"id": 5, "isEnabled": False},
                 ],
                 "operating-state-transitions": [
                     {
@@ -224,24 +168,17 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         prob = pl.LpProblem("state_max_time_slack_naming")
         input_data = {
             "Cost_parameters": {
-                "x_max_oper_state_time_left": 10000,
-                "x_max_oper_state_time": 10000,
                 "x_max_oper_state_time_b_left": 10000,
                 "x_max_oper_state_time_b": 10000,
             }
         }
 
-        prob, objective_terms = create_operating_state_max_time_constraints(
-            prob, 0, input_data, data, u_2_dict, len(intervals), intervals, CONV=[0], RES=[]
-        )
         prob, objective_terms = create_operating_state_max_transition_time_between_states_constraints_b(
-            prob, objective_terms, input_data, data, u_2_dict, len(intervals), intervals
+            prob, 0, input_data, data, u_2_dict, len(intervals), intervals
         )
         prob += objective_terms
         variable_names = {variable.name for variable in prob.variables()}
 
-        self.assertIn("s_max_oper_state_time_left_1_4_1", variable_names)
-        self.assertIn("s_max_oper_state_time_1_1_4_2", variable_names)
         self.assertNotIn("s_max_oper_state_time_b_left_1_4_5_1", variable_names)
         self.assertIn("s_max_oper_state_time_b_1_1_4_5_2", variable_names)
 

@@ -62,15 +62,28 @@ def round_to_best(a, b):
         else:
             return int(a / b) + 1
 
+
+def round_min_time_to_periods(value, time_gran):
+    return round_to_best(value, time_gran)
+
+
+def round_max_time_to_periods(value, time_gran):
+    if value == float('inf'):
+        return 100000000000
+    if value >= 100000000000:
+        return 100000000000
+    return int(value / time_gran)
+
+
 def time_granularity(data, time_gran):
     # Iterate over each generating unit in the data
     for gen_unit in data["Generating_Units"]:
         for operating_state in gen_unit["operating-states"]:
-            operating_state["min-time-enabled"] = round_to_best(operating_state.get("min-time-enabled", 0), time_gran)
-            operating_state["max-time-enabled"] = round_to_best(operating_state.get("max-time-enabled", float('inf')), time_gran)
+            operating_state["min-time-enabled"] = round_min_time_to_periods(operating_state.get("min-time-enabled", 0), time_gran)
+            operating_state["max-time-enabled"] = round_max_time_to_periods(operating_state.get("max-time-enabled", float('inf')), time_gran)
             # gen_unit["min_time_off"] = round_to_best(gen_unit["min_time_off"], time_gran)
-            operating_state["min-time-enabled-left"] = round_to_best(operating_state.get("min-time-enabled-left", 0), time_gran)
-            operating_state["max-time-enabled-left"] = round_to_best(operating_state.get("max-time-enabled-left", float('inf')), time_gran)
+            operating_state["min-time-enabled-left"] = round_min_time_to_periods(operating_state.get("min-time-enabled-left", 0), time_gran)
+            operating_state["max-time-enabled-left"] = round_max_time_to_periods(operating_state.get("max-time-enabled-left", float('inf')), time_gran)
 
         for allowed_transition in gen_unit['operating-state-transitions']:
             from_oper_state_id = allowed_transition['from']
@@ -81,12 +94,12 @@ def time_granularity(data, time_gran):
 
             # for the start of the scheduling period
             for next_state in to_oper_states:
-                next_state['min-transition-time-left_a'] = round_to_best(next_state.get('min-transition-time-left_a', 0), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
-                next_state['min-transition-time_a'] = round_to_best(next_state.get('min-transition-time_a', 0), time_gran)
-                next_state['min-transition-time_b'] = round_to_best(next_state.get('min-transition-time_b', 0), time_gran)
-                next_state['min-transition-time-left_b'] = round_to_best(next_state.get('min-transition-time-left_b', 0), time_gran)
-                next_state['max-transition-time-left_b'] = round_to_best(next_state.get('max-transition-time-left_b', float('inf')), time_gran)
-                next_state['max-transition-time_b'] = round_to_best(next_state.get('max-transition-time_b', float('inf')), time_gran)
+                next_state['min-transition-time-left_a'] = round_min_time_to_periods(next_state.get('min-transition-time-left_a', 0), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
+                next_state['min-transition-time_a'] = round_min_time_to_periods(next_state.get('min-transition-time_a', 0), time_gran)
+                next_state['min-transition-time_b'] = round_min_time_to_periods(next_state.get('min-transition-time_b', 0), time_gran)
+                next_state['min-transition-time-left_b'] = round_min_time_to_periods(next_state.get('min-transition-time-left_b', 0), time_gran)
+                next_state['max-transition-time-left_b'] = round_max_time_to_periods(next_state.get('max-transition-time-left_b', float('inf')), time_gran)
+                next_state['max-transition-time_b'] = round_max_time_to_periods(next_state.get('max-transition-time_b', float('inf')), time_gran)
             # gen_unit["time_Off_left"] = round_to_best(gen_unit["time_Off_left"], time_gran)
 
             # operating_state["Therm_state_min_time_on"] = [round_to_best(t, time_gran) for t in operating_state["Therm_state_min_time_on"]]
@@ -101,8 +114,8 @@ def time_granularity(data, time_gran):
 
             # for the start of the scheduling period
 
-            to_oper_states['min-transition-time-left'] = round_to_best(to_oper_states.get('min-transition-time-left', 0), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
-            to_oper_states['min-transition-time'] = round_to_best(to_oper_states.get('min-transition-time', 0), time_gran)
+            to_oper_states['min-transition-time-left'] = round_min_time_to_periods(to_oper_states.get('min-transition-time-left', 0), time_gran)  # if min-time key does not exist, use 0 as the default value for min-time
+            to_oper_states['min-transition-time'] = round_min_time_to_periods(to_oper_states.get('min-transition-time', 0), time_gran)
 
     # print(data)
     return data

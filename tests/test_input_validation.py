@@ -43,6 +43,19 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(report["status"], "failed")
         self.assertTrue(any("RTD" in error for error in report["errors"]))
 
+    def test_bad_time_resolution_policy_fails_validation(self):
+        with INPUT_PATH.open(encoding="utf-8") as f:
+            data = json.load(f)
+        bad_data = copy.deepcopy(data)
+        bad_data.setdefault("optimization_parameters", {}).setdefault("time_resolution", {})[
+            "subperiod_operating_state_policy"
+        ] = "unknown"
+
+        report = validate_input_data(bad_data)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(any("subperiod_operating_state_policy" in error for error in report["errors"]))
+
     def test_thermal_desynchronization_state_is_connected_nonoperational(self):
         with INPUT_PATH.open(encoding="utf-8") as f:
             data = json.load(f)

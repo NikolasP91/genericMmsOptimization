@@ -57,6 +57,24 @@
             }
           }
         },
+        "time_resolution": {
+          "type": "object",
+          "description": "Optional controls for RDAS/DS sub-period operating-state handling.",
+          "properties": {
+            "subperiod_operating_state_policy": {
+              "enum": ["embed_transient", "period_rounding"],
+              "description": "Embed explicitly marked sub-period transient states into transition arcs, or leave all states as period-level states."
+            },
+            "transient_state_roles": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "State_role values treated as explicit transient-state markers."
+            },
+            "allow_initial_state_embedding": { "type": "boolean" },
+            "allow_operational_state_embedding": { "type": "boolean" },
+            "allow_shutdown_state_embedding": { "type": "boolean" }
+          }
+        },
         "early_stopping": {
           "type": "object",
           "properties": {

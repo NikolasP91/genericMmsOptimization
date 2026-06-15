@@ -258,6 +258,33 @@ def validate_input_data(input_data):
     ):
         errors.append("optimization_parameters.cost_curve_time_multiplier must be a positive number.")
 
+    time_resolution = optimization_parameters.get("time_resolution", {})
+    if time_resolution is not None:
+        if not isinstance(time_resolution, dict):
+            errors.append("optimization_parameters.time_resolution must be an object.")
+        else:
+            policy = time_resolution.get("subperiod_operating_state_policy", "embed_transient")
+            if policy not in ("embed_transient", "period_rounding"):
+                errors.append(
+                    "optimization_parameters.time_resolution.subperiod_operating_state_policy "
+                    "must be 'embed_transient' or 'period_rounding'."
+                )
+            roles = time_resolution.get("transient_state_roles")
+            if roles is not None and (
+                not isinstance(roles, list)
+                or any(not isinstance(role, str) or not role for role in roles)
+            ):
+                errors.append(
+                    "optimization_parameters.time_resolution.transient_state_roles must be a list of strings."
+                )
+            for field in (
+                "allow_initial_state_embedding",
+                "allow_operational_state_embedding",
+                "allow_shutdown_state_embedding",
+            ):
+                if field in time_resolution and not isinstance(time_resolution[field], bool):
+                    errors.append(f"optimization_parameters.time_resolution.{field} must be boolean.")
+
     early_stopping = optimization_parameters.get("early_stopping", {})
     if early_stopping is not None:
         if not isinstance(early_stopping, dict):

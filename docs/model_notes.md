@@ -61,6 +61,9 @@ The active optimization algebra has been modularized under `mms/model/`:
   variables.
 - `bounds.py`: local bound helpers used to replace broad big-M constants where
   constraint-specific limits are available.
+- `time_resolution.py`: RDAS/DS time-resolution preprocessing, including
+  sub-period operating-state classification, transient-state embedding, and
+  timing-resolution audit reporting.
 
 The active workflow is now split across:
 
@@ -352,6 +355,43 @@ variables are named `s_min_oper_state_time_b_left_{unit}_{state}_{t}` and
 unsuffixed `operating_states_min_time_constraint` flag is treated as B-style
 behavior for backward compatibility.
 
+RDAS/DS timing is period-indexed. A short operating-state duration such as 5 or
+25 minutes cannot be exactly represented by an hourly binary state variable. The
+model therefore separates timing data into:
+
+- period-level states, which remain ordinary `u_2[unit, period, state]`
+  decisions;
+- explicitly marked sub-period transient states, which can be embedded into
+  allowed transition arcs before the hourly MIP is built.
+
+The implementation is conservative and data-driven. A state is eligible for
+embedding only when it is explicitly marked as transient by `isTransient: true`,
+`time_resolution_class: "transient"`, or a transient `state_role` such as
+`synchronization` or `desynchronization`, and all positive timing values attached
+to that state/path are shorter than `Time_granularity`. Initial, shutdown, and
+operational states are not embedded unless explicitly allowed through
+`optimization_parameters.time_resolution`, because removing those states can
+change commitment, reserve, or offline semantics. Non-embedded sub-period timing
+data are reported in `Time_Resolution_Report` so the run remains auditable.
+
+Minimum timing values are rounded up to dispatch periods. Maximum timing values
+are rounded down to dispatch periods. This avoids the previous unsafe behavior
+where a 5-minute maximum stay could become an allowed full-hour stay in an
+hourly RDAS/DS model. The academic reason is the same one emphasized by
+time-adaptive and continuous-time UC literature: fixed hourly UC variables do not
+capture intra-hour startup/shutdown/ramping trajectories exactly. Supporting
+references include:
+
+- Pineda, Fernandez-Blanco, and Morales, "Time-Adaptive Unit Commitment",
+  2018, https://arxiv.org/abs/1810.00206.
+- Rajabdorri, Lobato, Sigrist, and Aghaei, "Data-Driven Continuous-Time
+  Framework for Frequency-Constrained Unit Commitment", 2024,
+  https://arxiv.org/abs/2312.11387.
+- Hreinsson, Analui, and Scaglione, "Continuous Time Multi-stage Stochastic
+  Reserve and Unit Commitment", 2018, https://arxiv.org/abs/1803.07115.
+- Pan and Guan, "Convex Hulls for the Unit Commitment Polytope", 2017,
+  https://arxiv.org/abs/1701.08943.
+
 Thermal/conventional desynchronization is represented as a separate connected
 but non-operational operating state. In the biomass test case this state uses
 `state_role: "desynchronization"`, `isShutdown: false`, `isOperational: false`,
@@ -411,6 +451,7 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `penalty_hierarchy_audit.json`
 - `objective_breakdown_report.json`
 - `slack_penalty_report.json`
+- `time_resolution_report.json`
 - `warning_report.json`
 - `diagnostics_report.json`
 - `performance_profile.json`

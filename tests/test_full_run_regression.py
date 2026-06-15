@@ -90,6 +90,7 @@ class FullRunRegressionTests(unittest.TestCase):
                 "penalty_hierarchy_audit.json",
                 "objective_breakdown_report.json",
                 "slack_penalty_report.json",
+                "time_resolution_report.json",
                 "warning_report.json",
                 "diagnostics_report.json",
                 "performance_profile.json",

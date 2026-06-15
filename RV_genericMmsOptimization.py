@@ -2,8 +2,16 @@
 # Active model algebra lives under mms/model, post-solve processing under mms/postsolve,
 # and workflow orchestration under mms/pipeline.
 
-from mms.model.preprocessing import filter_generating_units, round_to_best, time_granularity, unit_categories
+from mms.model.preprocessing import (
+    filter_generating_units,
+    round_max_time_to_periods,
+    round_min_time_to_periods,
+    round_to_best,
+    time_granularity,
+    unit_categories,
+)
 from mms.model.problem import define_problem_and_solve_problem
+from mms.model.time_resolution import prepare_operating_state_time_resolution
 from mms.pipeline import parse_and_execute_optimization
 from mms.postsolve import (
     APRR_violation,
@@ -64,6 +72,9 @@ __all__ = [
     "pivot_df",
     "ramp_up_down_violations",
     "res_pv_constraints_violations",
+    "prepare_operating_state_time_resolution",
+    "round_max_time_to_periods",
+    "round_min_time_to_periods",
     "round_to_best",
     "setpoint_calculation",
     "solution_processing",

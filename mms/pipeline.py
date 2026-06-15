@@ -3,6 +3,7 @@
 from time import perf_counter
 
 from mms.model.preprocessing import filter_generating_units, time_granularity, unit_categories
+from mms.model.time_resolution import prepare_operating_state_time_resolution
 from mms.model.problem import define_problem_and_solve_problem
 from mms.postsolve import (
     APRR_violation,
@@ -43,6 +44,7 @@ def parse_and_execute_optimization(input_data):
 
     preprocessing_start = perf_counter()
     time_gran = input_data["Time_granularity"]
+    input_data = prepare_operating_state_time_resolution(input_data)
     input_data = time_granularity(input_data, time_gran)
     data = input_data.get('Generating_Units', [])
     data = filter_generating_units(data)
@@ -249,6 +251,7 @@ def parse_and_execute_optimization(input_data):
                                    tertiary_upwards_APRV, tertiary_downwards_APRV)
     data_output_json["Solve_Metadata"] = solve_metadata
     data_output_json["Slack_Penalty_Report"] = slack_penalty_report
+    data_output_json["Time_Resolution_Report"] = input_data.get("Time_Resolution_Report", {})
 
     record_stage("postsolve_output_assembly", postsolve_start)
     data_output_json["Performance_Profile"] = {

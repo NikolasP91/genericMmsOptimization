@@ -102,6 +102,7 @@ def build_warning_report(input_data, output_data, validation_report=None, tolera
     for report_name, prefix in (
         ("Thermal_Cost_Curve_Generation", "thermal_cost_curve_generation"),
         ("Penalty_Hierarchy_Audit", "penalty_hierarchy"),
+        ("Time_Resolution_Report", "time_resolution"),
     ):
         for issue in output_data.get(report_name, {}).get("issues", []):
             if issue.get("severity") not in ("warning", "error"):
@@ -193,6 +194,7 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
     for report_name, stage_name in (
         ("Thermal_Cost_Curve_Generation", "thermal_cost_curve_generation"),
         ("Penalty_Hierarchy_Audit", "penalty_hierarchy_audit"),
+        ("Time_Resolution_Report", "time_resolution"),
     ):
         for issue in output_data.get(report_name, {}).get("issues", []):
             if issue.get("severity") != "error":
@@ -295,6 +297,11 @@ def build_diagnostics_report(input_data, output_data=None, validation_report=Non
             "issue_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("issue_count", 0),
             "warning_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("warning_count", 0),
             "error_count": output_data.get("Penalty_Hierarchy_Audit", {}).get("error_count", 0),
+        },
+        "time_resolution_summary": {
+            "status": output_data.get("Time_Resolution_Report", {}).get("status"),
+            "embedded_state_count": output_data.get("Time_Resolution_Report", {}).get("embedded_state_count", 0),
+            "issue_count": len(output_data.get("Time_Resolution_Report", {}).get("issues", [])),
         },
         "slack_penalty_summary": {
             "status": slack_penalty_report.get("status"),

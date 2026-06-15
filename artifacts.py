@@ -53,6 +53,8 @@ def write_run_artifacts(
             write_json(artifact_dir / "objective_breakdown_report.json", output_data["Objective_Breakdown_Report"])
         if "Slack_Penalty_Report" in output_data:
             write_json(artifact_dir / "slack_penalty_report.json", output_data["Slack_Penalty_Report"])
+        if "Time_Resolution_Report" in output_data:
+            write_json(artifact_dir / "time_resolution_report.json", output_data["Time_Resolution_Report"])
         if "Warning_Report" in output_data:
             write_json(artifact_dir / "warning_report.json", output_data["Warning_Report"])
         if "Diagnostics_Report" in output_data:

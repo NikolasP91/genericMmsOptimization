@@ -17,7 +17,14 @@ from mms.model.operating_states import (
     create_operating_state_min_time_constraints_a,
     create_operating_state_min_time_constraints_b,
 )
-from mms.model.preprocessing import filter_generating_units, round_to_best, time_granularity, unit_categories
+from mms.model.preprocessing import (
+    filter_generating_units,
+    round_max_time_to_periods,
+    round_min_time_to_periods,
+    round_to_best,
+    time_granularity,
+    unit_categories,
+)
 from mms.model.problem import define_problem_and_solve_problem
 
 
@@ -121,6 +128,12 @@ class ModelModuleBoundaryTests(unittest.TestCase):
         self.assertEqual(3, round_to_best(45, 15))
         self.assertEqual(4, round_to_best(46, 15))
         self.assertEqual(100000000000, round_to_best(float("inf"), 15))
+
+    def test_min_and_max_time_rounding_use_conservative_direction(self):
+        self.assertEqual(1, round_min_time_to_periods(25, 60))
+        self.assertEqual(0, round_max_time_to_periods(25, 60))
+        self.assertEqual(2, round_min_time_to_periods(61, 60))
+        self.assertEqual(1, round_max_time_to_periods(61, 60))
 
     def test_operating_state_min_time_slacks_follow_project_naming(self):
         intervals = [0, 1, 2]

@@ -335,7 +335,10 @@ operating-state transition families:
   startup/shutdown variables.
 - `operating_states_min_transition_time_between_states_constraint_a` uses
   `min-transition-time_a` and `min-transition-time-left_a` on an allowed
-  operating-state transition to prevent leaving source state A too soon.
+  operating-state transition to prevent leaving source state A too soon. For
+  inherited `min-transition-time-left_a`, slack is charged per remaining
+  protected period after an early departure, so leaving with five periods still
+  owed creates five A-left slack periods rather than one transition-event slack.
 - `operating_states_min_transition_time_between_states_constraint_b` uses
   `min-transition-time_b` and `min-transition-time-left_b` to require the
   destination state B to persist after a specific A -> B transition.
@@ -345,10 +348,10 @@ operating-state transition families:
 
 Do not use A-style maximum transition timing fields
 (`max-transition-time_a`, `max-transition-time-left_a`); they are intentionally
-unsupported and validation warns that they are ignored. Generic operating-state
-dwell helpers remain in the code for legacy tests/experiments, but new input
-files should express operating-state timing through the transition-specific A/B
-fields above.
+unsupported and validation warns that they are ignored. New input files should
+express operating-state timing through the transition-specific A/B fields above;
+the older generic operating-state dwell helpers have been removed from the
+active model module.
 
 RDAS/DS timing is period-indexed. A short operating-state duration such as 5 or
 25 minutes cannot be exactly represented by an hourly binary state variable. The

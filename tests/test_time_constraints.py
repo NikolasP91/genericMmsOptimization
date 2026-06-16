@@ -194,6 +194,55 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         # One in-horizon A-side slack is needed after entering state 1 at interval 2.
         self.assertEqual(1, _value(prob, "s_min_a_1_1_3"))
 
+    def test_min_transition_time_a_left_counts_remaining_protected_periods(self):
+        # Use six periods so a three-period residual source-side obligation can be observed completely.
+        intervals = [0, 1, 2, 3, 4, 5]
+        # Create a minimization problem for inherited source-side transition minimum time.
+        prob = pl.LpProblem("transition_minimum_time_a_left_duration_scenario", pl.LpMinimize)
+        # Define one allowed transition 1 -> 2 with three dispatch periods still owed at the horizon start.
+        data = [
+            {
+                "gen_id": 0,
+                "operating-state-transitions": [
+                    {
+                        "from": 1,
+                        "transitions": [
+                            {
+                                "id": 2,
+                                "min-transition-time-left_a": 3,
+                                "min-transition-time_a": 0,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+        # Force an immediate departure from source state 1 into state 2 at period 1.
+        u_2_dict = _fixed_operating_state_variables(
+            prob,
+            intervals,
+            {
+                1: {0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
+                2: {0: 0, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1},
+            },
+        )
+
+        # Add the A-side timing constraints.
+        prob, objective_terms = create_min_transition_time_between_states_constraints_a(
+            prob, 0, _input_data(), data, u_2_dict, intervals
+        )
+
+        # Solve the forced schedule.
+        _solve(prob, objective_terms)
+
+        # Leaving immediately with three periods left should create three protected-period violations.
+        self.assertEqual(3, _sum_values(prob, "s_min_a_left_1_"))
+        # The violation should be charged for every protected period and stop after the residual window ends.
+        self.assertEqual(1, _value(prob, "s_min_a_left_1_1"))
+        self.assertEqual(1, _value(prob, "s_min_a_left_1_2"))
+        self.assertEqual(1, _value(prob, "s_min_a_left_1_3"))
+        self.assertEqual(0, _value(prob, "s_min_a_left_1_4"))
+
     def test_min_transition_time_b_requires_destination_state_to_persist(self):
         # Use five periods to test destination-side persistence after arrival.
         intervals = [0, 1, 2, 3, 4]

@@ -379,8 +379,9 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
     Two related inputs are handled:
 
     * ``min-transition-time-left_a`` represents residual time that was already
-      owed at the start of the horizon. It prevents an immediate transition out
-      of the source state until that residual obligation is satisfied.
+      owed at the start of the horizon. It protects the source state at the
+      beginning of the horizon and counts the remaining protected periods if the
+      unit leaves that source state too early.
     * ``min-transition-time_a`` is the normal in-horizon minimum source-side
       time. If the unit enters source state ``A`` at interval ``t``, the model
       must keep the transition pattern consistent with staying in ``A`` for the
@@ -411,20 +412,25 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
             to_oper_states = copy.deepcopy(allowed_transition['transitions'])
             to_oper_states.append({'id': from_oper_state_id})
 
-            # Residual left-time rule. During the initial protected periods,
-            # the model should not be in source A at t - 1 and destination B at
-            # t, because that would mean A was left before its residual minimum
-            # source-side obligation was completed.
-            for next_state in to_oper_states:
-                next_state_id = next_state['id']
-                min_time_left = next_state.get('min-transition-time-left_a', 0)
-                for t in intervals[1:min_time_left + 1]:
-                    if (gen_id, t, next_state_id) in u_2_dict:
-                        prob += (
-                                u_2_dict[(gen_id, t - 1, from_oper_state_id)]
-                                + u_2_dict[(gen_id, t, next_state_id)]
-                                <= 1 + s_min_a_left[gen_id][t]
-                        )
+            # Residual left-time rule. A-side timing protects the source state,
+            # so inherited time is enforced as a source-state stay requirement:
+            # if the unit starts the horizon in source state A, then A should
+            # remain selected throughout the protected window. The slack at
+            # protected period tau is forced to 1 when the unit has already
+            # left A at any earlier protected period k <= tau. Therefore, an
+            # immediate departure with five periods left creates five slack
+            # periods, not merely one transition-event slack.
+            min_time_left = max(
+                int(next_state.get('min-transition-time-left_a', 0))
+                for next_state in to_oper_states
+            )
+            protected_periods = intervals[1:min_time_left + 1]
+            for protected_index, protected_t in enumerate(protected_periods):
+                for earlier_t in protected_periods[:protected_index + 1]:
+                    prob += (
+                            u_2_dict[(gen_id, earlier_t, from_oper_state_id)]
+                            >= u_2_dict[(gen_id, 0, from_oper_state_id)] - s_min_a_left[gen_id][protected_t]
+                    )
 
             # In-horizon source-side minimum-time rule. entered_state_now is 1
             # only when the model switches into source state A at interval t.

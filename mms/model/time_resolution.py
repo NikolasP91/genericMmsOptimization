@@ -213,6 +213,10 @@ def _without_timing_fields(transition):
 
 def _merge_embedded_transition(incoming, outgoing, transient_state, timing_values):
     """Create a direct arc that carries the skipped transient state's metadata."""
+    # Preserve metadata from any transient states already embedded before this state.
+    upstream_metadata = copy.deepcopy(incoming.get("embedded_transient_states", []))
+    # Preserve metadata from any transient states already embedded after this state.
+    downstream_metadata = copy.deepcopy(outgoing.get("embedded_transient_states", []))
     # Start from the outgoing arc because its target id is the destination after the transient state.
     merged = _without_timing_fields(outgoing)
     # Make the direct arc target equal to the original outgoing destination.
@@ -251,10 +255,9 @@ def _merge_embedded_transition(incoming, outgoing, transient_state, timing_value
             for field, value, from_state, to_state in timing_values
         ],
     }
-    # Ensure the direct arc can carry one or more embedded-state metadata records.
-    merged.setdefault("embedded_transient_states", [])
-    # Attach the metadata for the state being bypassed.
-    merged["embedded_transient_states"].append(metadata)
+    # Keep the full embedded chain in path order: upstream skipped states, the
+    # current skipped state, then downstream skipped states.
+    merged["embedded_transient_states"] = upstream_metadata + [metadata] + downstream_metadata
     # Return the direct arc replacing incoming -> transient -> outgoing.
     return merged
 

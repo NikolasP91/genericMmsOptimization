@@ -176,6 +176,7 @@ def run(args):
     try:
         optimization_start = perf_counter()
         result = parse_and_execute_optimization(input_data)
+        preprocessed_mip_input = result.pop("_Preprocessed_MIP_Input", None)
         record_stage("optimization_pipeline", optimization_start)
     except Exception as e:
         print(f"\nError during optimization: {e}")
@@ -262,7 +263,13 @@ def run(args):
     events.event("artifacts_writing", artifact_dir=str(artifact_dir) if artifact_dir is not None else None)
     artifact_write_start = perf_counter()
     refresh_performance_profile()
-    write_run_artifacts(artifact_dir, input_data, output_data=result, log_file=args.log_file)
+    write_run_artifacts(
+        artifact_dir,
+        input_data,
+        output_data=result,
+        log_file=args.log_file,
+        preprocessed_input_data=preprocessed_mip_input,
+    )
     record_stage("artifact_write", artifact_write_start)
     events.event("artifacts_written", artifact_dir=str(artifact_dir) if artifact_dir is not None else None)
     refresh_performance_profile()

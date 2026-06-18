@@ -24,6 +24,7 @@ By default the runner uses:
 - output: `optimization_output.json`
 - post-solve validation: enabled
 - run artifacts: `runs/latest`
+- preprocessed MIP input: `runs/latest/preprocessed_mip_input.json`
 - plain text run log: `run_log.txt`
 - structured event log: `runs/latest/run_events.jsonl`
 - native HiGHS solver log: `runs/latest/solver_log.txt`

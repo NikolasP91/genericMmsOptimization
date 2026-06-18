@@ -52,6 +52,7 @@ class FullRunRegressionTests(unittest.TestCase):
 
             solve_metadata = output["Solve_Metadata"]
             self.assertEqual("Optimal", output["Solution_Status"])
+            self.assertNotIn("_Preprocessed_MIP_Input", output)
             self.assertEqual("passed", output["Validation"]["status"])
             self.assertAlmostEqual(382562.14962105, solve_metadata["objective_value"], delta=1e-3)
             self.assertEqual(12032, solve_metadata["num_constraints"])
@@ -80,6 +81,7 @@ class FullRunRegressionTests(unittest.TestCase):
 
             expected_artifacts = [
                 "input_snapshot.json",
+                "preprocessed_mip_input.json",
                 "output_snapshot.json",
                 "run_metadata.json",
                 "solve_metadata.json",
@@ -105,6 +107,11 @@ class FullRunRegressionTests(unittest.TestCase):
             for filename in expected_artifacts:
                 with self.subTest(artifact=filename):
                     self.assertTrue((artifact_dir / filename).exists())
+
+            with (artifact_dir / "preprocessed_mip_input.json").open(encoding="utf-8") as f:
+                preprocessed_input = json.load(f)
+            self.assertIn("Time_Resolution_Report", preprocessed_input)
+            self.assertIn("Generating_Units", preprocessed_input)
 
             with (artifact_dir / "run_events.jsonl").open(encoding="utf-8") as f:
                 event_names = [json.loads(line)["event"] for line in f if line.strip()]

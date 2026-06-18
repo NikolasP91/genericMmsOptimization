@@ -436,6 +436,7 @@ same physical availability/forecast limits.
 By default, `main.py` writes run artifacts to `runs/latest`:
 
 - `input_snapshot.json`
+- `preprocessed_mip_input.json`
 - `output_snapshot.json`
 - `run_metadata.json`
 - `solve_metadata.json`

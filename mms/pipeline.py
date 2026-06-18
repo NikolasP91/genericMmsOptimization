@@ -2,6 +2,7 @@
 
 # Extracted from RV_genericMmsOptimization.py. Keep behavior-compatible with the original optimization workflow.
 
+import copy
 from time import perf_counter
 
 from mms.model.preprocessing import filter_generating_units, time_granularity, unit_categories
@@ -52,6 +53,8 @@ def parse_and_execute_optimization(input_data):
     input_data = prepare_operating_state_time_resolution(input_data)
     # Then convert all remaining minute-based timing fields into dispatch-period counts.
     input_data = time_granularity(input_data, time_gran)
+    # Keep an audit snapshot of the exact preprocessed input used to build the MIP.
+    preprocessed_mip_input = copy.deepcopy(input_data)
     # Read the generating-unit list after time-resolution preprocessing and timing conversion.
     data = input_data.get('Generating_Units', [])
     # Remove units that have no availability in the modeled horizon.
@@ -260,6 +263,7 @@ def parse_and_execute_optimization(input_data):
     data_output_json["Solve_Metadata"] = solve_metadata
     data_output_json["Slack_Penalty_Report"] = slack_penalty_report
     data_output_json["Time_Resolution_Report"] = input_data.get("Time_Resolution_Report", {})
+    data_output_json["_Preprocessed_MIP_Input"] = preprocessed_mip_input
 
     record_stage("postsolve_output_assembly", postsolve_start)
     data_output_json["Performance_Profile"] = {

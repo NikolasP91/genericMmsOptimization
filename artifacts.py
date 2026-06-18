@@ -27,11 +27,14 @@ def write_run_artifacts(
     error_report=None,
     diagnostics_report=None,
     log_file=None,
+    preprocessed_input_data=None,
 ):
     """Write the standard collection of input, output, report, log, and MPS artifacts."""
     if artifact_dir is None:
         return
     write_json(artifact_dir / "input_snapshot.json", input_data)
+    if preprocessed_input_data is not None:
+        write_json(artifact_dir / "preprocessed_mip_input.json", preprocessed_input_data)
     if output_data is not None:
         write_json(artifact_dir / "output_snapshot.json", output_data)
         if "Validation" in output_data:

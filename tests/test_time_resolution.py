@@ -114,6 +114,68 @@ class TimeResolutionPreprocessingTests(unittest.TestCase):
         # The mathematical arc should not retain the minute-level field because the state is no longer period-level.
         self.assertNotIn("min-transition-time_b", embedded_arc)
 
+    def test_consecutive_transient_states_preserve_full_embedded_metadata_chain(self):
+        # Build an input with two consecutive transient states in the path 1 -> 2 -> 3 -> 4.
+        input_data = {
+            "Time_granularity": 60,
+            "optimization_parameters": {},
+            "Generating_Units": [
+                {
+                    "gen_id": 0,
+                    "comments": "Thermal Generating Unit",
+                    "operating-states": [
+                        {"id": 1, "isShutdown": False, "isOperational": False, "isEnabled": True},
+                        {
+                            "id": 2,
+                            "state_role": "synchronization",
+                            "isShutdown": False,
+                            "isOperational": False,
+                            "isEnabled": False,
+                        },
+                        {
+                            "id": 3,
+                            "state_role": "startup",
+                            "isShutdown": False,
+                            "isOperational": False,
+                            "isEnabled": False,
+                        },
+                        {"id": 4, "isShutdown": False, "isOperational": True, "isEnabled": False},
+                    ],
+                    "operating-state-transitions": [
+                        {"from": 1, "transitions": [{"id": 2, "transition-cost": 4, "min-transition-time_b": 10}]},
+                        {"from": 2, "transitions": [{"id": 3, "transition-cost": 6, "min-transition-time_b": 20}]},
+                        {"from": 3, "transitions": [{"id": 4, "transition-cost": 8, "min-transition-time_b": 30}]},
+                        {"from": 4, "transitions": [{"id": 1, "transition-cost": 0}]},
+                    ],
+                    "state-transitions": [],
+                }
+            ],
+        }
+
+        # Run preprocessing so both transient states can be embedded sequentially.
+        prepared = prepare_operating_state_time_resolution(copy.deepcopy(input_data))
+        # Read the rewritten unit topology.
+        unit = prepared["Generating_Units"][0]
+        # Select the final direct 1 -> 4 arc produced after both transient states are bypassed.
+        transitions_from_1 = next(
+            transition_group["transitions"]
+            for transition_group in unit["operating-state-transitions"]
+            if transition_group["from"] == 1
+        )
+        direct_arc = next(transition for transition in transitions_from_1 if transition["id"] == 4)
+
+        # Both transient states should be removed from the explicit operating-state set.
+        self.assertEqual({1, 4}, {state["id"] for state in unit["operating-states"]})
+        # The direct arc should preserve the total transition cost: 4 + 6 + 8.
+        self.assertEqual(18.0, direct_arc["transition-cost"])
+        # The final arc metadata should preserve both skipped states, in path order.
+        self.assertEqual(
+            [2, 3],
+            [state["id"] for state in direct_arc["embedded_transient_states"]],
+        )
+        # The report should still record that two states were embedded.
+        self.assertEqual(2, prepared["Time_Resolution_Report"]["embedded_state_count"])
+
     def test_unmarked_subperiod_timer_is_reported_but_not_embedded(self):
         # Build the same unit with a 25-minute timer but no explicit transient-state marker.
         input_data = {

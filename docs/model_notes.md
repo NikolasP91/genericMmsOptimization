@@ -335,16 +335,17 @@ operating-state transition families:
   startup/shutdown variables.
 - `operating_states_min_transition_time_between_states_constraint_a` uses
   `min-transition-time_a` and `min-transition-time-left_a` on an allowed
-  operating-state transition to prevent leaving source state A too soon. For
-  inherited `min-transition-time-left_a`, slack is charged per remaining
-  protected period after an early departure, so leaving with five periods still
-  owed creates five A-left slack periods rather than one transition-event slack.
+  operating-state transition to prevent leaving source state A too soon. Slack
+  is charged per remaining protected period after an early departure, so leaving
+  with five periods still owed creates five A-side slack periods rather than
+  one transition-event slack.
 - `operating_states_min_transition_time_between_states_constraint_b` uses
   `min-transition-time_b` and `min-transition-time-left_b` to require the
   destination state B to persist after a specific A -> B transition.
 - `operating_states_max_transition_time_between_states_constraint_b` uses
   `max-transition-time_b` and `max-transition-time-left_b` to cap the stay in
-  destination state B after a specific A -> B transition.
+  destination state B after a specific A -> B transition. Slack is charged per
+  excess period in the continuous destination-state stay.
 
 Do not use A-style maximum transition timing fields
 (`max-transition-time_a`, `max-transition-time-left_a`); they are intentionally

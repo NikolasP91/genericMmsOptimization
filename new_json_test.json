@@ -40,9 +40,9 @@
   "constraints": {
     "min_max_constraint": true,
     "load_production_balance_constraint": true,
-    "operating_states_min_transition_time_between_states_constraint_a": true,
+    "operating_states_min_transition_time_between_states_constraint_a": false,
     "operating_states_min_transition_time_between_states_constraint_b": false,
-    "operating_states_max_transition_time_between_states_constraint_b": false,
+    "operating_states_max_transition_time_between_states_constraint_b": true,
     "state_min_time_constraint": false,
     "APRR_calculations": {
                           "calculation-method_upwards": [[1, 1], [0, 1], 0, 0],
@@ -273,7 +273,8 @@
           "transitions": [
             {
               "id": 4,
-              "transition-cost": 0
+              "transition-cost": 0,
+              "max-transition-time_b": 300
             }
           ]
         },

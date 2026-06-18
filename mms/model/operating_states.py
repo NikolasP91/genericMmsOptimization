@@ -226,11 +226,14 @@ def create_operating_state_max_transition_time_between_states_constraints_b(
 
     * ``max-transition-time-left_b`` covers the beginning of the horizon. It is
       used when the unit was already in the destination state before the
-      optimization horizon started and some maximum-time obligation remains.
+      optimization horizon started and some maximum-time obligation remains. An
+      overstay is charged for every excess period in the initial continuous
+      destination-state stretch.
     * ``max-transition-time_b`` covers transitions that occur inside the
       optimization horizon. Whenever the model moves from ``A`` at ``t - 1`` to
       ``B`` at ``t``, the unit may remain in ``B`` only for the specified number
-      of periods.
+      of periods. If the continuous stay in ``B`` exceeds that maximum, slack is
+      charged for every excess period.
 
     The constraints are soft. If the input data and other requirements make the
     timing rule impossible to satisfy, binary slack variables can relax the rule
@@ -310,43 +313,43 @@ def create_operating_state_max_transition_time_between_states_constraints_b(
                 )
 
                 # Residual maximum-time obligation at the horizon start. If B
-                # is initially enabled, the model cannot select B for more than
-                # max_time_left periods at the beginning of the schedule unless
-                # it pays the corresponding slack penalty.
+                # is initially enabled, every excess period in the initial
+                # continuous B stretch receives its own slack. If B is left
+                # before an excess period, the prefix sum is no longer full and
+                # later re-entry is not charged against this inherited timer.
                 if max_time_left is not None and state_by_id[next_state_id]["isEnabled"]:
-                    violation_period = max_time_left + 1
-                    if violation_period <= last_period:
+                    for violation_period in intervals[max_time_left + 1:]:
+                        prefix_periods = intervals[1:violation_period + 1]
                         prob += (
                                 pl.lpSum(
                                     u_2_dict[(gen_id, t, next_state_id)]
-                                    for t in intervals[1:violation_period + 1]
+                                    for t in prefix_periods
                                 )
-                                <= max_time_left
+                                <= len(prefix_periods) - 1
                                 + s_max_oper_state_time_b_left[
                                     (gen_id, from_oper_state_id, next_state_id, violation_period)
                                 ]
                         )
 
-                # In-horizon maximum stay after an A -> B transition. The
-                # right-hand side is relaxed by one period unless the source A
-                # was active at tt - 1. When A was active and B is selected from
-                # tt onward, the sum over the checked window cannot exceed the
-                # allowed maximum without using slack.
+                # In-horizon maximum stay after an A -> B transition. For each
+                # potential entry period tt, every later excess period checks
+                # whether B has remained selected continuously since tt. If so,
+                # that excess period needs its own slack.
                 if max_time is not None:
                     for tt in intervals[1:]:
-                        violation_period = tt + max_time
-                        if violation_period > last_period:
-                            continue
-                        prob += (
-                                pl.lpSum(
-                                    u_2_dict[(gen_id, t, next_state_id)]
-                                    for t in intervals[tt:violation_period + 1]
-                                )
-                                <= max_time + 1 - u_2_dict[(gen_id, tt - 1, from_oper_state_id)]
-                                + s_max_oper_state_time_b_1[
-                                    (gen_id, from_oper_state_id, next_state_id, violation_period)
-                                ]
-                        )
+                        for violation_period in intervals[tt + max_time:]:
+                            checked_periods = intervals[tt:violation_period + 1]
+                            prob += (
+                                    pl.lpSum(
+                                        u_2_dict[(gen_id, t, next_state_id)]
+                                        for t in checked_periods
+                                    )
+                                    <= len(checked_periods) - 1
+                                    + (1 - u_2_dict[(gen_id, tt - 1, from_oper_state_id)])
+                                    + s_max_oper_state_time_b_1[
+                                        (gen_id, from_oper_state_id, next_state_id, violation_period)
+                                    ]
+                            )
 
                 # Penalize every max-time slack variable so violations are used
                 # only when they are cheaper than infeasibility or other larger
@@ -383,9 +386,9 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
       beginning of the horizon and counts the remaining protected periods if the
       unit leaves that source state too early.
     * ``min-transition-time_a`` is the normal in-horizon minimum source-side
-      time. If the unit enters source state ``A`` at interval ``t``, the model
-      must keep the transition pattern consistent with staying in ``A`` for the
-      required number of periods before moving to another operating state.
+      time. If the unit enters source state ``A`` and then leaves ``A`` too
+      early, the model charges slack for every remaining protected period after
+      that early departure.
 
     The constraints are soft and use binary slack variables:
 
@@ -434,8 +437,11 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
 
             # In-horizon source-side minimum-time rule. entered_state_now is 1
             # only when the model switches into source state A at interval t.
-            # If that happens, future transitions out of A inside the protected
-            # window are blocked unless the slack variable is activated.
+            # If an A -> B departure occurs before the A-side minimum time is
+            # completed, every remaining protected period after that departure
+            # receives its own slack. This keeps the penalty proportional to the
+            # missing protected duration rather than to a single early-departure
+            # event.
             for t in intervals[1:]:
                 entered_state_now = (
                         u_2_dict[(gen_id, t, from_oper_state_id)]
@@ -443,14 +449,18 @@ def create_min_transition_time_between_states_constraints_a(prob, objective_term
                 )
                 for next_state in to_oper_states:
                     next_state_id = next_state['id']
+                    if next_state_id == from_oper_state_id:
+                        continue
                     min_time = int(next_state.get('min-transition-time_a', 0))
-                    for t_prime in intervals[t:t + min_time]:
-                        if (gen_id, t_prime, next_state_id) in u_2_dict:
-                            prob += (
-                                    u_2_dict[(gen_id, t_prime - 1, from_oper_state_id)]
-                                    + u_2_dict[(gen_id, t_prime, next_state_id)]
-                                    <= 2 - entered_state_now + s_min_a_1[gen_id][t_prime]
-                            )
+                    protected_periods = intervals[t:t + min_time]
+                    for departure_index, departure_t in enumerate(protected_periods):
+                        if (gen_id, departure_t, next_state_id) in u_2_dict:
+                            for protected_t in protected_periods[departure_index:]:
+                                prob += (
+                                        u_2_dict[(gen_id, departure_t - 1, from_oper_state_id)]
+                                        + u_2_dict[(gen_id, departure_t, next_state_id)]
+                                        <= 2 - entered_state_now + s_min_a_1[gen_id][protected_t]
+                                )
 
         # Add source-side slack penalties to the objective for all modeled
         # dispatch intervals. The left and normal penalties are separated so

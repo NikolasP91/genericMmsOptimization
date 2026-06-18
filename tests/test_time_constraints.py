@@ -243,6 +243,53 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         self.assertEqual(1, _value(prob, "s_min_a_left_1_3"))
         self.assertEqual(0, _value(prob, "s_min_a_left_1_4"))
 
+    def test_min_transition_time_a_counts_remaining_periods_after_early_departure(self):
+        # Use six periods so a four-period source-side minimum time can be violated for three periods.
+        intervals = [0, 1, 2, 3, 4, 5]
+        # Create a minimization problem for in-horizon source-side transition minimum time.
+        prob = pl.LpProblem("transition_minimum_time_a_duration_scenario", pl.LpMinimize)
+        # Define one allowed transition 1 -> 2 with four periods of A-side protection after entering state 1.
+        data = [
+            {
+                "gen_id": 0,
+                "operating-state-transitions": [
+                    {
+                        "from": 1,
+                        "transitions": [
+                            {
+                                "id": 2,
+                                "min-transition-time_a": 4,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+        # Force entry into source state 1 at period 1, then force departure to state 2 at period 2.
+        u_2_dict = _fixed_operating_state_variables(
+            prob,
+            intervals,
+            {
+                1: {0: 0, 1: 1, 2: 0, 3: 0, 4: 0, 5: 0},
+                2: {0: 1, 1: 0, 2: 1, 3: 1, 4: 1, 5: 1},
+            },
+        )
+
+        # Add the A-side timing constraints.
+        prob, objective_terms = create_min_transition_time_between_states_constraints_a(
+            prob, 0, _input_data(), data, u_2_dict, intervals
+        )
+
+        # Solve the forced schedule.
+        _solve(prob, objective_terms)
+
+        # Leaving at period 2 with protection owed through period 4 creates three missing-period slacks.
+        self.assertEqual(3, _sum_values(prob, "s_min_a_1_1_"))
+        self.assertEqual(1, _value(prob, "s_min_a_1_1_2"))
+        self.assertEqual(1, _value(prob, "s_min_a_1_1_3"))
+        self.assertEqual(1, _value(prob, "s_min_a_1_1_4"))
+        self.assertEqual(0, _value(prob, "s_min_a_1_1_5"))
+
     def test_min_transition_time_b_requires_destination_state_to_persist(self):
         # Use five periods to test destination-side persistence after arrival.
         intervals = [0, 1, 2, 3, 4]
@@ -335,10 +382,62 @@ class TimeConstraintScenarioTests(unittest.TestCase):
         # Solve the transition-specific maximum-time scenario.
         _solve(transition_prob, transition_objective)
 
-        # One left-side B-family slack is needed after the initial 4 -> 5 situation.
+        # Two left-side B-family slacks are needed because state 5 exceeds a one-period inherited limit.
+        self.assertEqual(2, _sum_values(transition_prob, "s_max_oper_state_time_b_left_"))
         self.assertEqual(1, _value(transition_prob, "s_max_oper_state_time_b_left_1_4_5_2"))
+        self.assertEqual(1, _value(transition_prob, "s_max_oper_state_time_b_left_1_4_5_3"))
         # One in-horizon B-family slack is needed when state 5 overstays after transition.
         self.assertEqual(1, _value(transition_prob, "s_max_oper_state_time_b_1_1_4_5_3"))
+
+    def test_max_transition_time_b_counts_every_excess_period(self):
+        # Use six periods so a two-period maximum stay can be exceeded by three periods.
+        intervals = [0, 1, 2, 3, 4, 5]
+        # Create a problem for transition-specific B-side maximum timing constraints.
+        prob = pl.LpProblem("transition_max_operating_time_b_duration_scenario", pl.LpMinimize)
+        # Define a transition 4 -> 5 with a two-period maximum stay in destination state 5.
+        data = [
+            {
+                "gen_id": 0,
+                "operating-states": [
+                    {"id": 4, "isEnabled": False},
+                    {"id": 5, "isEnabled": False},
+                ],
+                "operating-state-transitions": [
+                    {
+                        "from": 4,
+                        "transitions": [
+                            {
+                                "id": 5,
+                                "max-transition-time_b": 2,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+        # Force a transition from state 4 into state 5 at period 1 and keep state 5 active through period 5.
+        u_2_dict = _fixed_operating_state_variables(
+            prob,
+            intervals,
+            {
+                4: {0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
+                5: {0: 0, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1},
+            },
+        )
+
+        # Add transition-specific maximum B-side dwell constraints.
+        prob, objective_terms = create_operating_state_max_transition_time_between_states_constraints_b(
+            prob, 0, _input_data(), data, u_2_dict, len(intervals), intervals
+        )
+
+        # Solve the forced schedule.
+        _solve(prob, objective_terms)
+
+        # Periods 3, 4, and 5 exceed the two-period maximum stay and each receives one slack.
+        self.assertEqual(3, _sum_values(prob, "s_max_oper_state_time_b_1_"))
+        self.assertEqual(1, _value(prob, "s_max_oper_state_time_b_1_1_4_5_3"))
+        self.assertEqual(1, _value(prob, "s_max_oper_state_time_b_1_1_4_5_4"))
+        self.assertEqual(1, _value(prob, "s_max_oper_state_time_b_1_1_4_5_5"))
 
 
 if __name__ == "__main__":

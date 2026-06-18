@@ -54,7 +54,7 @@ class FullRunRegressionTests(unittest.TestCase):
             self.assertEqual("Optimal", output["Solution_Status"])
             self.assertEqual("passed", output["Validation"]["status"])
             self.assertAlmostEqual(382562.14962105, solve_metadata["objective_value"], delta=1e-3)
-            self.assertEqual(11755, solve_metadata["num_constraints"])
+            self.assertEqual(12032, solve_metadata["num_constraints"])
             self.assertEqual(5191, solve_metadata["num_variables"])
             self.assertEqual(1000.0, solve_metadata["big_m"])
             self.assertGreaterEqual(solve_metadata["mps_write_seconds"], 0)

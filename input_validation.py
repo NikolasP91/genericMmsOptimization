@@ -177,6 +177,8 @@ def validate_input_data(input_data):
                 for binary_field in ("isShutdown", "isEnabled", "isOperational"):
                     if not isinstance(operating_state.get(binary_field), bool):
                         errors.append(f"{state_path}.{binary_field} must be a boolean.")
+                if "isTransient" in operating_state and not isinstance(operating_state["isTransient"], bool):
+                    errors.append(f"{state_path}.isTransient must be a boolean.")
                 for numeric_field in ("max-power", "min-power"):
                     value = operating_state.get(numeric_field)
                     if not _is_number(value) or value < 0:

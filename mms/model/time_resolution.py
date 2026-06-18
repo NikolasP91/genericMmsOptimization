@@ -38,8 +38,6 @@ DEFAULT_TRANSIENT_ROLES = {
     "desynchronization",
     "startup",
     "shutdown",
-    "rampup",
-    "rampdown",
 }
 
 # Shared large sentinel used elsewhere in the project to represent effectively infinite time.
@@ -94,10 +92,14 @@ def _state_role(operating_state):
 
 def _is_explicit_transient_state(operating_state, options):
     """Return whether input data explicitly marks a state as transient."""
-    # A state can be transient by boolean flag, time-resolution class, or semantic role.
+    # When the input JSON contains isTransient, treat that boolean as the user's
+    # explicit choice. This lets isTransient: false override older role-based
+    # defaults such as state_role: "desynchronization".
+    if "isTransient" in operating_state:
+        return operating_state.get("isTransient") is True
+    # Otherwise fall back to the older markers: time-resolution class or semantic role.
     return (
-        operating_state.get("isTransient") is True
-        or operating_state.get("time_resolution_class") == "transient"
+        operating_state.get("time_resolution_class") == "transient"
         or _state_role(operating_state) in options["transient_roles"]
     )
 

@@ -364,14 +364,30 @@ model therefore separates timing data into:
   allowed transition arcs before the hourly MIP is built.
 
 The implementation is conservative and data-driven. A state is eligible for
-embedding only when it is explicitly marked as transient by `isTransient: true`,
-`time_resolution_class: "transient"`, or a transient `state_role` such as
-`synchronization` or `desynchronization`, and all positive timing values attached
-to that state/path are shorter than `Time_granularity`. Initial, shutdown, and
-operational states are not embedded unless explicitly allowed through
+embedding only when it is explicitly marked as transient and all positive timing
+values attached to that state/path are shorter than `Time_granularity`. Use
+`isTransient: true` or `isTransient: false` in each operating state as the
+authoritative input switch. When `isTransient` is omitted, the legacy markers
+`time_resolution_class: "transient"` or transient `state_role` values such as
+`synchronization` and `desynchronization` are still accepted. Initial, shutdown,
+and operational states are not embedded unless explicitly allowed through
 `optimization_parameters.time_resolution`, because removing those states can
 change commitment, reserve, or offline semantics. Non-embedded sub-period timing
 data are reported in `Time_Resolution_Report` so the run remains auditable.
+
+The bypass strategy is selected in the input JSON through:
+
+```json
+"optimization_parameters": {
+  "time_resolution": {
+    "subperiod_operating_state_policy": "embed_transient"
+  }
+}
+```
+
+Use `"embed_transient"` to allow eligible transient states to be embedded into
+transition arcs. Use `"period_rounding"` to keep all operating states explicit
+and only round their timing data to dispatch-period counts.
 
 Minimum timing values are rounded up to dispatch periods. Maximum timing values
 are rounded down to dispatch periods. This avoids the previous unsafe behavior
@@ -438,6 +454,7 @@ By default, `main.py` writes run artifacts to `runs/latest`:
 - `input_snapshot.json`
 - `preprocessed_mip_input.json`
 - `output_snapshot.json`
+- `output_through_solution_status.json`
 - `run_metadata.json`
 - `solve_metadata.json`
 - `validation_report.json`

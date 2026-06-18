@@ -214,6 +214,47 @@ class TimeResolutionPreprocessingTests(unittest.TestCase):
         # A 25-minute minimum time rounds up to one 60-minute dispatch period.
         self.assertEqual(1, transition_to_2["min-transition-time_b"])
 
+    def test_is_transient_false_overrides_role_based_transient_default(self):
+        # Build a unit where state 2 has a role that would normally be treated as transient.
+        input_data = {
+            "Time_granularity": 60,
+            "optimization_parameters": {},
+            "Generating_Units": [_base_unit()],
+        }
+        # Explicitly choosing false must keep the state period-level even though the role is transient.
+        input_data["Generating_Units"][0]["operating-states"][1]["state_role"] = "synchronization"
+        input_data["Generating_Units"][0]["operating-states"][1]["isTransient"] = False
+
+        # Run the time-resolution preprocessing.
+        prepared = prepare_operating_state_time_resolution(copy.deepcopy(input_data))
+        # Read the rewritten unit topology.
+        unit = prepared["Generating_Units"][0]
+
+        # No state should be embedded because isTransient is the authoritative user switch.
+        self.assertEqual(0, prepared["Time_Resolution_Report"]["embedded_state_count"])
+        # The synchronization state should remain available as an explicit operating state.
+        self.assertIn(2, {state["id"] for state in unit["operating-states"]})
+
+    def test_ramp_roles_are_not_transient_by_default(self):
+        # Build a unit where state 2 has a ramp role but no explicit transient flag.
+        input_data = {
+            "Time_granularity": 60,
+            "optimization_parameters": {},
+            "Generating_Units": [_base_unit()],
+        }
+        # Ramp-up/ramp-down labels describe movement between output levels, not automatic bypass states.
+        input_data["Generating_Units"][0]["operating-states"][1]["state_role"] = "rampup"
+
+        # Run preprocessing with the default embed_transient policy.
+        prepared = prepare_operating_state_time_resolution(copy.deepcopy(input_data))
+        # Read the rewritten unit topology.
+        unit = prepared["Generating_Units"][0]
+
+        # The ramp state should remain explicit because rampup is not a transient role.
+        self.assertEqual(0, prepared["Time_Resolution_Report"]["embedded_state_count"])
+        # State 2 should still be represented in the period-level operating-state list.
+        self.assertIn(2, {state["id"] for state in unit["operating-states"]})
+
     def test_maximum_times_round_down_to_dispatch_periods(self):
         # Minimum-time constraints must round up, so a 25-minute minimum becomes one hourly period.
         self.assertEqual(1, round_min_time_to_periods(25, 60))

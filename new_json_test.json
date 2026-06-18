@@ -1,6 +1,6 @@
 {
   "Cost_parameters": {
-    "x_load": 2000,
+    "x_load": 20000,
     "x_primary_APR_up": 10000,
     "x_primary_APR_down": 10000,
     "x_secondary_APR_up": 5000,
@@ -42,7 +42,7 @@
     "load_production_balance_constraint": true,
     "operating_states_min_transition_time_between_states_constraint_a": false,
     "operating_states_min_transition_time_between_states_constraint_b": false,
-    "operating_states_max_transition_time_between_states_constraint_b": true,
+    "operating_states_max_transition_time_between_states_constraint_b": false,
     "state_min_time_constraint": false,
     "APRR_calculations": {
                           "calculation-method_upwards": [[1, 1], [0, 1], 0, 0],
@@ -64,6 +64,19 @@
     "require_optimal": true,
     "big_m": "auto",
     "cost_curve_time_unit": "euro_per_mw_per_minute",
+    "time_resolution": {
+      "subperiod_operating_state_policy": "embed_transient",
+      "transient_state_roles": [
+        "transient",
+        "synchronization",
+        "desynchronization",
+        "startup",
+        "shutdown"
+      ],
+      "allow_initial_state_embedding": false,
+      "allow_operational_state_embedding": false,
+      "allow_shutdown_state_embedding": false
+    },
     "highs_options": {
       "user_objective_scale": -4
     },
@@ -155,7 +168,8 @@
           "enabled-cost": 0,
           "isShutdown": true,
           "isEnabled": true,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 1,
@@ -164,7 +178,8 @@
           "enabled-cost": 5,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 2,
@@ -173,7 +188,8 @@
           "enabled-cost": 10,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 3,
@@ -182,7 +198,8 @@
           "enabled-cost": 15,
           "isShutdown": false,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 4,
@@ -193,7 +210,8 @@
           "enabled-cost": 0,
           "isShutdown": false,
           "isEnabled": false,
-          "isOperational": true
+          "isOperational": true,
+          "isTransient": false
         },
         {
           "id": 5,
@@ -203,7 +221,8 @@
           "enabled-cost": 15,
           "isShutdown": false,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": true
         }
       ],
        "state-transitions": [
@@ -381,7 +400,8 @@
           "enabled-cost": 0,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 1,
@@ -390,7 +410,8 @@
           "enabled-cost": 2.5,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 2,
@@ -399,7 +420,8 @@
           "enabled-cost": 5,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 3,
@@ -408,7 +430,8 @@
           "enabled-cost": 10,
           "isShutdown": false,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 4,
@@ -419,7 +442,8 @@
           "enabled-cost": 0,
           "isShutdown": false,
           "isEnabled": true,
-          "isOperational": true
+          "isOperational": true,
+          "isTransient": false
         },
         {
           "id": 5,
@@ -429,7 +453,8 @@
           "enabled-cost": 10,
           "isShutdown": false,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": true
         }
       ],
        "state-transitions": [
@@ -588,7 +613,8 @@
           "enabled-cost": 0,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
         },
         {
           "id": 1,
@@ -599,7 +625,8 @@
           "enabled-cost": 0,
           "isShutdown": false,
           "isEnabled": true,
-          "isOperational": true
+          "isOperational": true,
+          "isTransient": false
         }
       ],
        "state-transitions": [
@@ -705,7 +732,8 @@
           "enabled-cost": 0,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
 
         },
         {
@@ -717,7 +745,8 @@
           "enabled-cost": 0,
           "isShutdown": false,
           "isEnabled": true,
-          "isOperational": true
+          "isOperational": true,
+          "isTransient": false
         }
       ],
        "state-transitions": [
@@ -818,7 +847,8 @@
           "enabled-cost": 0,
           "isShutdown": true,
           "isEnabled": false,
-          "isOperational": false
+          "isOperational": false,
+          "isTransient": false
 
         },
         {
@@ -830,7 +860,8 @@
           "enabled-cost": 0,
           "isShutdown": false,
           "isEnabled": true,
-          "isOperational": true
+          "isOperational": true,
+          "isTransient": false
         }
       ],
        "state-transitions": [

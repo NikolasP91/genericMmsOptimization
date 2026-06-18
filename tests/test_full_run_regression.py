@@ -49,9 +49,17 @@ class FullRunRegressionTests(unittest.TestCase):
 
             with output_path.open(encoding="utf-8") as f:
                 output = json.load(f)
+            compact_output_path = tmp_path / "optimization_output_through_solution_status.json"
+            with compact_output_path.open(encoding="utf-8") as f:
+                compact_output = json.load(f)
 
             solve_metadata = output["Solve_Metadata"]
             self.assertEqual("Optimal", output["Solution_Status"])
+            self.assertEqual("Optimal", compact_output["Solution_Status"])
+            self.assertNotIn("Solve_Metadata", compact_output)
+            self.assertNotIn("Run_Metadata", compact_output)
+            self.assertNotIn("Dispatch_Instructions", compact_output)
+            self.assertEqual("Solution_Status", list(compact_output)[-1])
             self.assertNotIn("_Preprocessed_MIP_Input", output)
             self.assertEqual("passed", output["Validation"]["status"])
             self.assertAlmostEqual(382562.14962105, solve_metadata["objective_value"], delta=1e-3)
@@ -83,6 +91,7 @@ class FullRunRegressionTests(unittest.TestCase):
                 "input_snapshot.json",
                 "preprocessed_mip_input.json",
                 "output_snapshot.json",
+                "output_through_solution_status.json",
                 "run_metadata.json",
                 "solve_metadata.json",
                 "validation_report.json",

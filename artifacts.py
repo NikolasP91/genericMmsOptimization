@@ -5,6 +5,9 @@ import shutil
 from pathlib import Path
 
 
+SOLUTION_STATUS_KEY = "Solution_Status"
+
+
 def prepare_artifact_dir(path):
     """Ensure the artifact directory exists and return it as a Path."""
     if path is None:
@@ -18,6 +21,23 @@ def write_json(path, data):
     """Write JSON data with stable indentation and UTF-8 encoding."""
     with Path(path).open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
+
+def solution_status_output_path(output_path):
+    """Return the companion output path that stops at the solution status."""
+    path = Path(output_path)
+    suffix = path.suffix or ".json"
+    return path.with_name(f"{path.stem}_through_solution_status{suffix}")
+
+
+def output_through_solution_status(output_data):
+    """Copy top-level output data through Solution_Status and omit later reports."""
+    trimmed_output = {}
+    for key, value in output_data.items():
+        trimmed_output[key] = value
+        if key == SOLUTION_STATUS_KEY:
+            break
+    return trimmed_output
 
 
 def write_run_artifacts(
@@ -37,6 +57,10 @@ def write_run_artifacts(
         write_json(artifact_dir / "preprocessed_mip_input.json", preprocessed_input_data)
     if output_data is not None:
         write_json(artifact_dir / "output_snapshot.json", output_data)
+        write_json(
+            artifact_dir / "output_through_solution_status.json",
+            output_through_solution_status(output_data),
+        )
         if "Validation" in output_data:
             write_json(artifact_dir / "validation_report.json", output_data["Validation"])
         if "Run_Metadata" in output_data:

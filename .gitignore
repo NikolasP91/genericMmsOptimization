@@ -13,3 +13,4 @@ runs/
 solution_values*.json
 Final_highsNative_solution_values.json
 optimization_output.json
+optimization_output_through_solution_status.json

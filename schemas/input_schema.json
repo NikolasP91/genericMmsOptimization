@@ -106,6 +106,27 @@
           "operating-state-transitions"
         ],
         "properties": {
+          "operating-states": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "integer" },
+                "isTransient": {
+                  "type": "boolean",
+                  "description": "Explicit user switch for transient-state bypass eligibility. When present, false overrides state_role and time_resolution_class defaults."
+                },
+                "time_resolution_class": {
+                  "type": "string",
+                  "description": "Optional legacy marker; 'transient' is treated as transient only when isTransient is omitted."
+                },
+                "state_role": {
+                  "type": "string",
+                  "description": "Optional semantic role. Roles configured in optimization_parameters.time_resolution.transient_state_roles are treated as transient only when isTransient is omitted."
+                }
+              }
+            }
+          },
           "var_gen_cost(euro/MW)": {
             "type": "array",
             "prefixItems": [

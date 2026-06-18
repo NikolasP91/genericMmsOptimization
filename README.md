@@ -22,6 +22,7 @@ By default the runner uses:
 - input: `v2.1_last_real_values_RDAS_60_FAT---test-case_BIOMASS.json`
 - solver: HiGHS through PuLP/highspy
 - output: `optimization_output.json`
+- output through solution status: `optimization_output_through_solution_status.json`
 - post-solve validation: enabled
 - run artifacts: `runs/latest`
 - preprocessed MIP input: `runs/latest/preprocessed_mip_input.json`

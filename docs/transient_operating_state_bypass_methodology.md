@@ -77,10 +77,20 @@ or:
 "state_role": "desynchronization"
 ```
 
+When `isTransient` is present, it is the authoritative user choice:
+
+```json
+"isTransient": false
+```
+
+keeps the state explicit even if `state_role` or `time_resolution_class` would
+otherwise mark it as transient. If `isTransient` is omitted, the older
+`time_resolution_class` and `state_role` markers are used as fallbacks.
+
 The default recognized roles are:
 
 ```text
-transient, synchronization, desynchronization, startup, shutdown, rampup, rampdown
+transient, synchronization, desynchronization, startup, shutdown
 ```
 
 After a state is marked as transient, the code checks its timing data. The state
@@ -125,6 +135,20 @@ These protections can be changed through:
 ```
 
 Use these override switches carefully.
+
+The bypass strategy itself is selected through:
+
+```json
+"optimization_parameters": {
+  "time_resolution": {
+    "subperiod_operating_state_policy": "embed_transient"
+  }
+}
+```
+
+Use `"embed_transient"` to allow eligible transient states to be bypassed. Use
+`"period_rounding"` to disable bypassing and keep every operating state explicit
+in the MIP.
 
 ## 5. Step-by-Step Algorithm
 

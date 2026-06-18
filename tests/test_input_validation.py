@@ -59,6 +59,17 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(report["status"], "failed")
         self.assertTrue(any("subperiod_operating_state_policy" in error for error in report["errors"]))
 
+    def test_operating_state_is_transient_must_be_boolean(self):
+        with INPUT_PATH.open(encoding="utf-8") as f:
+            data = json.load(f)
+        bad_data = copy.deepcopy(data)
+        bad_data["Generating_Units"][0]["operating-states"][0]["isTransient"] = "false"
+
+        report = validate_input_data(bad_data)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(any("isTransient" in error for error in report["errors"]))
+
     def test_thermal_desynchronization_state_is_connected_nonoperational(self):
         with INPUT_PATH.open(encoding="utf-8") as f:
             data = json.load(f)

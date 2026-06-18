@@ -8,7 +8,13 @@ import traceback
 from time import perf_counter
 from pathlib import Path
 
-from artifacts import prepare_artifact_dir, write_json, write_run_artifacts
+from artifacts import (
+    output_through_solution_status,
+    prepare_artifact_dir,
+    solution_status_output_path,
+    write_json,
+    write_run_artifacts,
+)
 from input_validation import (
     InputValidationError,
     assert_valid_input,
@@ -250,12 +256,15 @@ def run(args):
     refresh_performance_profile()
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
+    compact_output_path = solution_status_output_path(output_path)
+    write_json(compact_output_path, output_through_solution_status(result))
     record_stage("output_write", output_write_start)
 
     solution_status = result.get("Solution_Status", "Unknown")
     print(f"\nOptimization finished with status: {solution_status}")
     print(format_validation_report(validation))
     print(f"Output written to: {output_path}")
+    print(f"Output through solution status written to: {compact_output_path}")
     if artifact_dir is not None:
         print(f"Artifacts written to: {artifact_dir}")
     sys.stdout.flush()
@@ -275,8 +284,13 @@ def run(args):
     refresh_performance_profile()
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
+    write_json(compact_output_path, output_through_solution_status(result))
     if artifact_dir is not None:
         write_json(artifact_dir / "output_snapshot.json", result)
+        write_json(
+            artifact_dir / "output_through_solution_status.json",
+            output_through_solution_status(result),
+        )
         write_json(artifact_dir / "performance_profile.json", result["Performance_Profile"])
     return 0
 

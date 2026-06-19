@@ -307,7 +307,7 @@ def _embed_state(unit, transient_state, timing_values):
     outgoing_group = groups_by_from.get(transient_id)
     # If the candidate has no outgoing arcs, it cannot be safely embedded.
     if not outgoing_group:
-        return False, []
+        return False, [], "missing_outgoing_arc"
     # Exclude self-loops because a bypass must connect a predecessor to a different successor.
     outgoing_transitions = [
         transition
@@ -316,14 +316,44 @@ def _embed_state(unit, transient_state, timing_values):
     ]
     # If no usable outgoing arcs remain, the state cannot be bypassed.
     if not outgoing_transitions:
-        return False, []
+        return False, [], "missing_outgoing_arc"
+
+    original_transition_groups = copy.deepcopy(unit.get("operating-state-transitions", []))
+    has_incoming_arc = False
+    for transition_group in original_transition_groups:
+        from_state = transition_group.get("from")
+        if from_state == transient_id:
+            continue
+        transitions = transition_group.get("transitions", [])
+        incoming_arcs = [
+            transition
+            for transition in transitions
+            if transition.get("id") == transient_id
+        ]
+        if not incoming_arcs:
+            continue
+        has_incoming_arc = True
+        existing_targets = {
+            transition.get("id")
+            for transition in transitions
+            if transition.get("id") != transient_id
+        }
+        for outgoing in outgoing_transitions:
+            target_id = outgoing.get("id")
+            if target_id == from_state:
+                return False, [], "immediate_cycle"
+            if target_id in existing_targets:
+                return False, [], "duplicate_direct_arc"
+
+    if not has_incoming_arc:
+        return False, [], "missing_incoming_arc"
 
     # Track newly created direct arcs for the audit report.
     added_arcs = []
     # Build the replacement transition-group list.
     new_transition_groups = []
     # Visit every transition group in the original unit data.
-    for transition_group in unit.get("operating-state-transitions", []):
+    for transition_group in original_transition_groups:
         # Read the source state for this group.
         from_state = transition_group.get("from")
         # Drop the transition group that starts at the transient state because that state is being removed.
@@ -367,6 +397,9 @@ def _embed_state(unit, transient_state, timing_values):
         # Keep the modified group in the unit transition topology.
         new_transition_groups.append(transition_group)
 
+    if not added_arcs:
+        return False, [], "no_replacement_arc"
+
     # Replace the unit transition topology with the embedded-state topology.
     unit["operating-state-transitions"] = new_transition_groups
     # Remove the transient state from the explicit operating-state list.
@@ -376,7 +409,7 @@ def _embed_state(unit, transient_state, timing_values):
         if operating_state.get("id") != transient_id
     ]
     # Report success together with the direct arcs created by the embedding operation.
-    return True, added_arcs
+    return True, added_arcs, None
 
 
 def _add_issue(report, severity, code, message, **fields):
@@ -593,16 +626,29 @@ def prepare_operating_state_time_resolution(input_data):
                 continue
 
             # Attempt the graph rewrite that replaces source -> transient -> target with source -> target.
-            embedded, added_arcs = _embed_state(unit, operating_state, timing_values)
+            embedded, added_arcs, blocked_reason = _embed_state(unit, operating_state, timing_values)
             # If the graph lacks usable incoming/outgoing arcs, keep the state explicit and report the reason.
             if not embedded:
+                if blocked_reason == "duplicate_direct_arc":
+                    code = "transient_state_duplicate_direct_arc"
+                    message = (
+                        "Transient state was kept explicit because embedding would collide "
+                        "with an already declared direct transition arc."
+                    )
+                else:
+                    code = "transient_state_not_embeddable"
+                    message = (
+                        "Transient state could not be embedded because it lacks usable "
+                        "incoming/outgoing transition paths."
+                    )
                 _add_issue(
                     report,
                     "warning",
-                    "transient_state_not_embeddable",
-                    "Transient state could not be embedded because it lacks usable incoming/outgoing transition paths.",
+                    code,
+                    message,
                     unit_index=unit.get("gen_id"),
                     operating_state_id=operating_state["id"],
+                    blocked_reason=blocked_reason,
                 )
                 continue
 

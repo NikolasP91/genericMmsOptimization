@@ -107,6 +107,17 @@ class InputValidationTests(unittest.TestCase):
                 any(states[target["id"]]["isShutdown"] for target in transitions[desync_state["id"]])
             )
 
+    def test_multiple_operational_states_fail_validation(self):
+        with INPUT_PATH.open(encoding="utf-8") as f:
+            data = json.load(f)
+        bad_data = copy.deepcopy(data)
+        bad_data["Generating_Units"][0]["operating-states"][0]["isOperational"] = True
+
+        report = validate_input_data(bad_data)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(any("multiple isOperational=true" in error for error in report["errors"]))
+
 
 if __name__ == "__main__":
     unittest.main()

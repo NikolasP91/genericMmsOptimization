@@ -169,17 +169,20 @@ The methodology is:
 7. If any positive timing value is greater than or equal to `Time_granularity`,
    keep it explicit and report this.
 8. Apply the safety checks for initial, operational, and shutdown states.
-9. If the state passes all checks, remove it from the explicit state list.
-10. Replace every usable path `A -> T -> B` with a direct arc `A -> B`.
-11. Add the cost of `A -> T` and `T -> B` onto the new direct arc.
-12. Preserve timing fields that still belong to explicit endpoint states:
+9. Before embedding, check whether the source already has a direct `A -> B`
+   transition. If it does, keep `T` explicit and write an audit warning, because
+   otherwise the model would have to merge two distinct path definitions.
+10. If the state passes all checks, remove it from the explicit state list.
+11. Replace every usable path `A -> T -> B` with a direct arc `A -> B`.
+12. Add the cost of `A -> T` and `T -> B` onto the new direct arc.
+13. Preserve timing fields that still belong to explicit endpoint states:
     A-side timing from `A -> T` remains on `A -> B`, and B-side timing from
     `T -> B` remains on `A -> B`.
-13. Store metadata on the new direct arc explaining which transient state was
+14. Store metadata on the new direct arc explaining which transient state was
     embedded.
-14. Write the decision into `Time_Resolution_Report`.
-15. Convert the remaining minute-based timing values to dispatch-period counts.
-16. Build the MIP using the remaining explicit operating states and rewritten
+15. Write the decision into `Time_Resolution_Report`.
+16. Convert the remaining minute-based timing values to dispatch-period counts.
+17. Build the MIP using the remaining explicit operating states and rewritten
     transition graph.
 
 ## 6. Simple Example
@@ -368,6 +371,8 @@ For a transient state you want the model to bypass, check:
    embedding?
 6. Does it have a valid incoming path and outgoing path, for example `A -> T`
    and `T -> B`?
+7. Is there no already-declared direct `A -> B` transition that would collide
+   with the embedded path?
 
 If all answers are yes, the state should be bypassed.
 

@@ -162,6 +162,7 @@ def validate_input_data(input_data):
             errors.append(f"{path}.operating-states must be a nonempty list.")
         else:
             seen_state_ids = set()
+            operational_state_ids = []
             for state_index, operating_state in enumerate(operating_states):
                 state_path = f"{path}.operating-states[{state_index}]"
                 if not isinstance(operating_state, dict):
@@ -177,6 +178,8 @@ def validate_input_data(input_data):
                 for binary_field in ("isShutdown", "isEnabled", "isOperational"):
                     if not isinstance(operating_state.get(binary_field), bool):
                         errors.append(f"{state_path}.{binary_field} must be a boolean.")
+                if operating_state.get("isOperational") is True and isinstance(state_id, int):
+                    operational_state_ids.append(state_id)
                 if "isTransient" in operating_state and not isinstance(operating_state["isTransient"], bool):
                     errors.append(f"{state_path}.isTransient must be a boolean.")
                 for numeric_field in ("max-power", "min-power"):
@@ -186,6 +189,12 @@ def validate_input_data(input_data):
                 if _is_number(operating_state.get("min-power")) and _is_number(operating_state.get("max-power")):
                     if operating_state["min-power"] > operating_state["max-power"]:
                         errors.append(f"{state_path}.min-power cannot exceed max-power.")
+            if len(operational_state_ids) > 1:
+                errors.append(
+                    f"{path}.operating-states has multiple isOperational=true states "
+                    f"({operational_state_ids}). Current reserve formulation assumes at most one "
+                    "operational state per generating unit."
+                )
 
         operating_state_transitions = unit.get("operating-state-transitions", [])
         if isinstance(operating_state_transitions, list):

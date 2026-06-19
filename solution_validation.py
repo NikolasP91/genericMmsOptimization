@@ -17,16 +17,13 @@ def _max_abs(values):
 
 
 def _filtered_input_units(input_data):
-    """Return input units that survive the availability filter."""
-    units = []
-    for unit in input_data.get("Generating_Units", []):
-        availability = unit.get("availability", 0)
-        if isinstance(availability, list):
-            if any(value != 0 for value in availability):
-                units.append(unit)
-        elif availability != 0:
-            units.append(unit)
-    return units
+    """Return input units in model order.
+
+    Generating units are no longer removed merely because their availability is
+    zero. Keeping the original list preserves the project invariant that
+    ``gen_id`` equals the unit's list position.
+    """
+    return list(input_data.get("Generating_Units", []))
 
 
 def _add_check(checks, name, passed, detail, severity="error"):
@@ -61,7 +58,7 @@ def validate_solution(input_data, output_data, tolerance=1e-3):
         checks,
         "unit_count",
         len(output_units) == len(input_units),
-        f"Output has {len(output_units)} units; filtered input has {len(input_units)} units.",
+        f"Output has {len(output_units)} units; input has {len(input_units)} units.",
     )
 
     length_errors = []

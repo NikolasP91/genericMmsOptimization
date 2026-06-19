@@ -156,6 +156,34 @@ class TimeResolutionPreprocessingTests(unittest.TestCase):
             [item["field"] for item in embedded_arc["embedded_transient_states"][0]["timing_minutes"]],
         )
 
+    def test_duplicate_direct_arc_keeps_transient_state_explicit_with_warning(self):
+        # Build a topology that already has a direct 1 -> 3 arc in parallel with 1 -> 2 -> 3.
+        input_data = {
+            "Time_granularity": 60,
+            "optimization_parameters": {},
+            "Generating_Units": [_base_unit()],
+        }
+        input_data["Generating_Units"][0]["operating-states"][1]["isTransient"] = True
+        input_data["Generating_Units"][0]["operating-state-transitions"][0]["transitions"].append(
+            {"id": 3, "transition-cost": 99}
+        )
+
+        # Run preprocessing. The transient state should not be embedded because
+        # the direct arc would make it ambiguous which path cost/timing to keep.
+        prepared = prepare_operating_state_time_resolution(copy.deepcopy(input_data))
+        unit = prepared["Generating_Units"][0]
+        report = prepared["Time_Resolution_Report"]
+
+        # State 2 remains explicit, and its transition group remains available to the MIP.
+        self.assertIn(2, {state["id"] for state in unit["operating-states"]})
+        self.assertIn(2, {transition["from"] for transition in unit["operating-state-transitions"]})
+        # No state is embedded, and the audit explains the duplicate direct-arc blocker.
+        self.assertEqual(0, report["embedded_state_count"])
+        self.assertEqual("warning", report["status"])
+        self.assertTrue(
+            any(issue["code"] == "transient_state_duplicate_direct_arc" for issue in report["issues"])
+        )
+
     def test_consecutive_transient_states_preserve_full_embedded_metadata_chain(self):
         # Build an input with two consecutive transient states in the path 1 -> 2 -> 3 -> 4.
         input_data = {

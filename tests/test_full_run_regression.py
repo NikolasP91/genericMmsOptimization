@@ -121,6 +121,10 @@ class FullRunRegressionTests(unittest.TestCase):
                 preprocessed_input = json.load(f)
             self.assertIn("Time_Resolution_Report", preprocessed_input)
             self.assertIn("Generating_Units", preprocessed_input)
+            with (artifact_dir / "input_snapshot.json").open(encoding="utf-8") as f:
+                raw_input = json.load(f)
+            self.assertNotIn("Time_Resolution_Report", raw_input)
+            self.assertIn("preprocessed_input_sha256", output["Run_Metadata"])
 
             with (artifact_dir / "run_events.jsonl").open(encoding="utf-8") as f:
                 event_names = [json.loads(line)["event"] for line in f if line.strip()]

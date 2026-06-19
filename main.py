@@ -2,6 +2,7 @@
 """Command-line entry point for loading, solving, validating, and exporting MMS runs."""
 
 import argparse
+import copy
 import json
 import sys
 import traceback
@@ -128,6 +129,7 @@ def run(args):
     input_load_start = perf_counter()
     with config_path.open("r", encoding="utf-8") as f:
         input_data = json.load(f)
+    raw_input_data = copy.deepcopy(input_data)
     record_stage("input_load", input_load_start)
 
     if args.time_limit is not None:
@@ -165,7 +167,7 @@ def run(args):
             )
             write_run_artifacts(
                 artifact_dir,
-                input_data,
+                raw_input_data,
                 error_report=error_report,
                 diagnostics_report=diagnostics_report,
                 log_file=args.log_file,
@@ -183,6 +185,7 @@ def run(args):
         optimization_start = perf_counter()
         result = parse_and_execute_optimization(input_data)
         preprocessed_mip_input = result.pop("_Preprocessed_MIP_Input", None)
+        model_input_data = preprocessed_mip_input or input_data
         record_stage("optimization_pipeline", optimization_start)
     except Exception as e:
         print(f"\nError during optimization: {e}")
@@ -198,7 +201,7 @@ def run(args):
         )
         write_run_artifacts(
             artifact_dir,
-            input_data,
+            raw_input_data,
             error_report=error_report,
             diagnostics_report=diagnostics_report,
             log_file=args.log_file,
@@ -207,32 +210,38 @@ def run(args):
         return 1
 
     solution_validation_start = perf_counter()
-    validation = validate_solution(input_data, result, tolerance=args.validation_tolerance)
+    validation = validate_solution(model_input_data, result, tolerance=args.validation_tolerance)
     record_stage("solution_validation", solution_validation_start)
     result["Validation"] = validation
 
     report_start = perf_counter()
-    result.update(build_mms_reports(input_data, result, tolerance=args.validation_tolerance))
+    result.update(build_mms_reports(model_input_data, result, tolerance=args.validation_tolerance))
     record_stage("mms_report_building", report_start)
 
     diagnostics_start = perf_counter()
     result["Thermal_Cost_Curve_Audit"] = audit_thermal_cost_curves(
-        input_data, tolerance=args.validation_tolerance
+        model_input_data, tolerance=args.validation_tolerance
     )
     result["Thermal_Cost_Curve_Generation"] = cost_curve_generation_report
-    result["Thermal_Cost_Report"] = build_thermal_cost_report(input_data, result)
-    result["Penalty_Hierarchy_Audit"] = audit_penalty_hierarchy(input_data)
-    result["Objective_Breakdown_Report"] = build_objective_breakdown_report(input_data, result)
+    result["Thermal_Cost_Report"] = build_thermal_cost_report(model_input_data, result)
+    result["Penalty_Hierarchy_Audit"] = audit_penalty_hierarchy(model_input_data)
+    result["Objective_Breakdown_Report"] = build_objective_breakdown_report(model_input_data, result)
     result["Warning_Report"] = build_warning_report(
-        input_data, result, validation, tolerance=args.validation_tolerance
+        model_input_data, result, validation, tolerance=args.validation_tolerance
     )
     result["Diagnostics_Report"] = build_diagnostics_report(
-        input_data, result, validation, tolerance=args.validation_tolerance
+        model_input_data, result, validation, tolerance=args.validation_tolerance
     )
     record_stage("diagnostics_building", diagnostics_start)
 
     metadata_start = perf_counter()
-    result["Run_Metadata"] = build_run_metadata(input_data, config_path, output_path, args.solver)
+    result["Run_Metadata"] = build_run_metadata(
+        raw_input_data,
+        config_path,
+        output_path,
+        args.solver,
+        preprocessed_input_data=preprocessed_mip_input,
+    )
     record_stage("run_metadata", metadata_start)
     events.event(
         "optimization_finished",
@@ -274,7 +283,7 @@ def run(args):
     refresh_performance_profile()
     write_run_artifacts(
         artifact_dir,
-        input_data,
+        raw_input_data,
         output_data=result,
         log_file=args.log_file,
         preprocessed_input_data=preprocessed_mip_input,

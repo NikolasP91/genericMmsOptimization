@@ -32,7 +32,7 @@ class ModelModuleBoundaryTests(unittest.TestCase):
     def test_main_script_uses_modular_problem_entry_point(self):
         self.assertIs(public_problem_entry, define_problem_and_solve_problem)
 
-    def test_filter_generating_units_removes_fully_unavailable_units(self):
+    def test_filter_generating_units_keeps_all_units_to_preserve_gen_id_positions(self):
         units = [
             {"availability": [0, 0, 0]},
             {"availability": [0, 1, 0]},
@@ -40,7 +40,7 @@ class ModelModuleBoundaryTests(unittest.TestCase):
             {"availability": 5},
         ]
 
-        self.assertEqual([units[1], units[3]], filter_generating_units(units))
+        self.assertEqual(units, filter_generating_units(units))
 
     def test_unit_categories_preserve_current_set_construction(self):
         input_data = {

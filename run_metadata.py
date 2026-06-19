@@ -37,9 +37,9 @@ def input_hash(input_data):
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def build_run_metadata(input_data, config_path, output_path, solver_name):
+def build_run_metadata(input_data, config_path, output_path, solver_name, preprocessed_input_data=None):
     """Build reproducibility metadata for the current optimization run."""
-    return {
+    metadata = {
         "run_started_at_utc": datetime.now(timezone.utc).isoformat(),
         "config_path": str(config_path),
         "output_path": str(output_path),
@@ -57,3 +57,6 @@ def build_run_metadata(input_data, config_path, output_path, solver_name):
             "pandas": _module_version("pandas"),
         },
     }
+    if preprocessed_input_data is not None:
+        metadata["preprocessed_input_sha256"] = input_hash(preprocessed_input_data)
+    return metadata

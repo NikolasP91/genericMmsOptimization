@@ -46,7 +46,7 @@ implemented.
 
 The active optimization algebra has been modularized under `mms/model/`:
 
-- `preprocessing.py`: unit filtering, unit category construction, and
+- `preprocessing.py`: unit-order preservation, unit category construction, and
   time-granularity conversion used before model construction.
 - `problem.py`: top-level PuLP problem assembly, objective assembly, MPS export,
   solver selection, and solve metadata.
@@ -105,7 +105,7 @@ The repository also contains a high-level JSON Schema at
 Post-solve validation checks include:
 
 - Solver status is `Optimal` unless `require_optimal` is disabled.
-- Output unit count matches filtered input unit count.
+- Output unit count matches input unit count.
 - Per-period arrays have the expected length.
 - Load balance is respected after reported load curtailment.
 - Reported load curtailment is zero within tolerance.
@@ -319,6 +319,12 @@ metadata also records the number of constraints and variables added by each
 section. This improves MPS inspection and makes solver diagnostics less opaque
 than default `_C1234` names.
 
+Generating units are kept in the model even when their availability is zero
+throughout the modeled horizon. Earlier filtering created a fragile mismatch
+between `gen_id` values and list positions. The active model keeps the original
+unit order and lets the period-by-period availability constraints enforce zero
+available power.
+
 ## Formulation Tightening
 
 The operating-state transition cost formulation now uses explicit transition arc
@@ -378,6 +384,10 @@ and operational states are not embedded unless explicitly allowed through
 `optimization_parameters.time_resolution`, because removing those states can
 change commitment, reserve, or offline semantics. Non-embedded sub-period timing
 data are reported in `Time_Resolution_Report` so the run remains auditable.
+If a candidate path `A -> T -> B` would collide with an already declared direct
+`A -> B` transition, the transient state is kept explicit and the report records
+`transient_state_duplicate_direct_arc`. This avoids silently merging two
+different transition paths.
 
 The bypass strategy is selected in the input JSON through:
 
@@ -455,8 +465,9 @@ same physical availability/forecast limits.
 
 By default, `main.py` writes run artifacts to `runs/latest`:
 
-- `input_snapshot.json`
-- `preprocessed_mip_input.json`
+- `input_snapshot.json` with the raw JSON loaded from disk before preprocessing
+- `preprocessed_mip_input.json` with transient-state decisions and timing
+  conversion applied before MIP construction
 - `output_snapshot.json`
 - `output_through_solution_status.json`
 - `run_metadata.json`
@@ -517,8 +528,8 @@ completion, and artifact writing.
 
 `benchmarks/known_answer_cases.json` contains small hand-checkable validation
 and reporting cases. They cover exact load balance, RES curtailment accounting,
-reserve shortfall diagnostics, commitment transition instructions, and filtering
-of fully unavailable units. They are intentionally tiny, so they can run quickly
+reserve shortfall diagnostics, commitment transition instructions, and
+zero-availability unit handling. They are intentionally tiny, so they can run quickly
 in unit tests and catch regressions in the accounting logic.
 
 `tests/test_full_run_regression.py` runs the accepted biomass case through

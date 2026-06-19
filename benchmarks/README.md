@@ -6,7 +6,7 @@ requirements in `docs/requirements_traceability.md`.
 Current benchmark coverage:
 
 - `known_answer_cases.json`: hand-checkable exact-balance, RES-curtailment,
-  reserve-shortfall, commitment-transition, and unavailable-unit filtering
+  reserve-shortfall, commitment-transition, and zero-availability unit handling
   checks.
 - `tests/test_mms_reports.py`: dispatch instruction, reserve monitoring, and
   RES curtailment report checks.

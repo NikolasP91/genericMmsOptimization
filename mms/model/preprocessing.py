@@ -45,17 +45,16 @@ def unit_categories(input_data, data):
     return UNITS, CONV, RES, PV, RES_SP, RES_no_SP, PV_SP, PV_no_SP, on_AGC, Partially_Controllable
 
 def filter_generating_units(data):
-    # Filters out generating units with no availability in every dispatch period.
-    """Remove units that have no availability over the modeled horizon."""
-    filtered_units = []
-    for unit in data:
-        availability = unit.get("availability", 0)
-        if isinstance(availability, list):
-            if any(value != 0 for value in availability):
-                filtered_units.append(unit)
-        elif availability != 0:
-            filtered_units.append(unit)
-    return filtered_units
+    """Keep all generating units in the model-building data set.
+
+    Earlier versions removed units with zero availability over the modeled
+    horizon. That made post-filter list positions diverge from ``gen_id`` values
+    whenever an unavailable unit was in the middle of the input list. The active
+    formulation already has period-by-period availability constraints, so the
+    safer behavior is to keep every unit and let those constraints handle zero
+    availability.
+    """
+    return list(data)
 
 def round_to_best(a, b):
     """Round a positive duration up to the nearest dispatch-period count."""

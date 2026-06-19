@@ -160,10 +160,11 @@ The methodology is:
 3. For each operating state, check whether it is explicitly marked as
    transient.
 4. If it is not marked transient, keep it explicit.
-5. If it is marked transient, collect timing data from:
-   - the operating state itself;
-   - arcs entering the state;
-   - arcs leaving the state.
+5. If it is marked transient, collect timing data that actually belongs to that
+   state:
+   - timing declared directly on the operating state;
+   - B-side timing fields on arcs entering the state;
+   - A-side timing fields on arcs leaving the state.
 6. If the state has no positive timing data, keep it explicit and report this.
 7. If any positive timing value is greater than or equal to `Time_granularity`,
    keep it explicit and report this.
@@ -171,11 +172,14 @@ The methodology is:
 9. If the state passes all checks, remove it from the explicit state list.
 10. Replace every usable path `A -> T -> B` with a direct arc `A -> B`.
 11. Add the cost of `A -> T` and `T -> B` onto the new direct arc.
-12. Store metadata on the new direct arc explaining which transient state was
+12. Preserve timing fields that still belong to explicit endpoint states:
+    A-side timing from `A -> T` remains on `A -> B`, and B-side timing from
+    `T -> B` remains on `A -> B`.
+13. Store metadata on the new direct arc explaining which transient state was
     embedded.
-13. Write the decision into `Time_Resolution_Report`.
-14. Convert the remaining minute-based timing values to dispatch-period counts.
-15. Build the MIP using the remaining explicit operating states and rewritten
+14. Write the decision into `Time_Resolution_Report`.
+15. Convert the remaining minute-based timing values to dispatch-period counts.
+16. Build the MIP using the remaining explicit operating states and rewritten
     transition graph.
 
 ## 6. Simple Example

@@ -199,7 +199,7 @@
           "isShutdown": false,
           "isEnabled": false,
           "isOperational": false,
-          "isTransient": false
+          "isTransient": true
         },
         {
           "id": 4,
@@ -253,7 +253,7 @@
               "transition-cost": 800,
               "min-transition-time_a": 30,
               "min-transition-time_b": 24,
-              "min-transition-time-left_a": 300
+              "min-transition-time-left_a": 0
             }
           ]
         },

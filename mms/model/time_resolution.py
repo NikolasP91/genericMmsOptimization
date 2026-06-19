@@ -21,14 +21,24 @@ STATE_MAX_TIME_FIELDS = (
     "max-time-enabled-left",
 )
 
-# Transition-level timing fields checked when deciding whether a candidate state is sub-period.
-OPERATING_TRANSITION_TIME_FIELDS = (
+# Transition-level A-side timing fields apply to the source endpoint of an arc.
+SOURCE_SIDE_OPERATING_TRANSITION_TIME_FIELDS = (
     "min-transition-time_a",
     "min-transition-time-left_a",
+)
+
+# Transition-level B-side timing fields apply to the destination endpoint of an arc.
+DESTINATION_SIDE_OPERATING_TRANSITION_TIME_FIELDS = (
     "min-transition-time_b",
     "min-transition-time-left_b",
     "max-transition-time_b",
     "max-transition-time-left_b",
+)
+
+# Transition-level timing fields used by generic cleaning/reporting helpers.
+OPERATING_TRANSITION_TIME_FIELDS = (
+    SOURCE_SIDE_OPERATING_TRANSITION_TIME_FIELDS
+    + DESTINATION_SIDE_OPERATING_TRANSITION_TIME_FIELDS
 )
 
 # Default semantic labels that count as explicit transient-state markers.
@@ -144,8 +154,8 @@ def _incoming_transition_values(unit, state_id):
             # Ignore arcs that do not enter the candidate state.
             if transition.get("id") != state_id:
                 continue
-            # Check all timing fields that may live on an operating-state transition.
-            for field in OPERATING_TRANSITION_TIME_FIELDS:
+            # Only B-side fields on an incoming arc apply to the candidate destination state.
+            for field in DESTINATION_SIDE_OPERATING_TRANSITION_TIME_FIELDS:
                 # Keep only finite positive minute values.
                 value = _finite_positive_minutes(transition.get(field))
                 # Add the timing value with its arc endpoints when present.
@@ -165,8 +175,8 @@ def _outgoing_transition_values(unit, state_id):
     for transition in transition_group.get("transitions", []):
         # Remember the destination state for report metadata.
         to_state = transition.get("id")
-        # Check all operating-state transition timing fields.
-        for field in OPERATING_TRANSITION_TIME_FIELDS:
+        # Only A-side fields on an outgoing arc apply to the candidate source state.
+        for field in SOURCE_SIDE_OPERATING_TRANSITION_TIME_FIELDS:
             # Keep only finite positive minute values.
             value = _finite_positive_minutes(transition.get(field))
             # Add the timing value with its arc endpoints when present.
@@ -182,9 +192,9 @@ def _timing_values_for_state(unit, operating_state):
     state_id = operating_state.get("id")
     # Start with timing values declared directly on the state; use state_id as both endpoints for metadata.
     values = [(field, value, state_id, state_id) for field, value in _timing_values_from_state(operating_state)]
-    # Add timing values from arcs entering the candidate state.
+    # Add B-side timing values from arcs entering the candidate state.
     values.extend(_incoming_transition_values(unit, state_id))
-    # Add timing values from arcs leaving the candidate state.
+    # Add A-side timing values from arcs leaving the candidate state.
     values.extend(_outgoing_transition_values(unit, state_id))
     # Return the combined timing evidence used by the bypass decision.
     return values
@@ -213,6 +223,16 @@ def _without_timing_fields(transition):
     return cleaned
 
 
+def _copy_existing_timing_fields(source_transition, field_names):
+    """Copy selected timing fields from a transition when they still apply."""
+    # Preserve exact input values because minute-to-period conversion happens later in preprocessing.
+    return {
+        field: copy.deepcopy(source_transition[field])
+        for field in field_names
+        if field in source_transition
+    }
+
+
 def _merge_embedded_transition(incoming, outgoing, transient_state, timing_values):
     """Create a direct arc that carries the skipped transient state's metadata."""
     # Preserve metadata from any transient states already embedded before this state.
@@ -231,6 +251,13 @@ def _merge_embedded_transition(incoming, outgoing, transient_state, timing_value
     # Preserve an explicit zero when the outgoing arc originally carried a transition-cost key.
     elif "transition-cost" in merged:
         merged["transition-cost"] = 0
+
+    # Keep source-side timing from the incoming arc because it still constrains
+    # the explicit predecessor state after the path is rewritten as source -> target.
+    merged.update(_copy_existing_timing_fields(incoming, SOURCE_SIDE_OPERATING_TRANSITION_TIME_FIELDS))
+    # Keep destination-side timing from the outgoing arc because it still constrains
+    # the explicit successor state after the transient state is removed.
+    merged.update(_copy_existing_timing_fields(outgoing, DESTINATION_SIDE_OPERATING_TRANSITION_TIME_FIELDS))
 
     # Build auditable metadata describing the operating state that is no longer explicit.
     metadata = {
@@ -408,6 +435,14 @@ def _record_subperiod_timing_issues(report, unit, time_granularity):
                 # Skip missing, infinite, zero, negative, or period-representable values.
                 if value is None or value >= time_granularity:
                     continue
+                # A-side timing belongs to the source state; B-side timing belongs to the destination state.
+                timing_side = (
+                    "source"
+                    if field in SOURCE_SIDE_OPERATING_TRANSITION_TIME_FIELDS
+                    else "destination"
+                )
+                # Report the operating state whose timing obligation the field actually describes.
+                relevant_state = from_state if timing_side == "source" else to_state
                 # Treat sub-period maximum-time data as a warning for the same reason as state-level maxima.
                 severity = "warning" if field.startswith("max-") else "info"
                 # Use separate issue codes for sub-period min and max transition timers.
@@ -420,7 +455,9 @@ def _record_subperiod_timing_issues(report, unit, time_granularity):
                     f"{field}={value:g} min is shorter than the DS/RDAS dispatch period.",
                     unit_index=unit.get("gen_id"),
                     from_operating_state_id=from_state,
-                    operating_state_id=to_state,
+                    to_operating_state_id=to_state,
+                    operating_state_id=relevant_state,
+                    timing_side=timing_side,
                     field=field,
                     value_minutes=value,
                 )

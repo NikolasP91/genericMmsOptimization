@@ -365,7 +365,11 @@ model therefore separates timing data into:
 
 The implementation is conservative and data-driven. A state is eligible for
 embedding only when it is explicitly marked as transient and all positive timing
-values attached to that state/path are shorter than `Time_granularity`. Use
+values that belong to that state are shorter than `Time_granularity`. For a
+candidate state `T`, the relevant transition timers are B-side fields on arcs
+entering `T` and A-side fields on arcs leaving `T`. A-side timing from the
+predecessor arc and B-side timing from the successor arc are preserved on the
+new direct arc because they still belong to explicit endpoint states. Use
 `isTransient: true` or `isTransient: false` in each operating state as the
 authoritative input switch. When `isTransient` is omitted, the legacy markers
 `time_resolution_class: "transient"` or transient `state_role` values such as

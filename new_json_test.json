@@ -26,7 +26,7 @@
     "x_OOS_less_than": 10000
   },
   "Other_coefficients": {
-    "primary_upwards": [[1, 1.5], [30, 0.15], 5, 0.03],
+    "primary_upwards": [[1, 0.02], [0.05, 0.15], 5, 0.03],
     "primary_downwards": [[1, 0.02], [0.05, 0.15], 5, 0.04],
     "secondary_upwards": [[2, 0.02], [0.05, 0.15], 0.044, 0.03],
     "secondary_downwards": [[2, 0.1], [0.05, 0.15], 7, 4],

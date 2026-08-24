@@ -127,6 +127,7 @@ def svg_line_chart(title, series_by_name, colors_by_name, y_label):
         )
 
     lines = []
+    points_by_series = []
     for name, series in series_by_name.items():
         if not series:
             continue
@@ -136,6 +137,15 @@ def svg_line_chart(title, series_by_name, colors_by_name, y_label):
             f'<polyline points="{points}" fill="none" stroke="{color}" '
             'stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />'
         )
+        for index, value in enumerate(series):
+            tooltip = f"{name} | Period {index + 1}: {value:.3f} {y_label}"
+            points_by_series.append(
+                f'<circle class="hover-point" cx="{x_pos(index):.2f}" cy="{y_pos(value):.2f}" '
+                f'r="6" fill="{color}" stroke="#ffffff" stroke-width="2" '
+                f'data-series="{html.escape(name)}" data-period="{index + 1}" '
+                f'data-value="{value:.3f}" data-unit="{html.escape(y_label)}">'
+                f"<title>{html.escape(tooltip)}</title></circle>"
+            )
 
     x_ticks = []
     for index in range(periods):
@@ -174,6 +184,7 @@ def svg_line_chart(title, series_by_name, colors_by_name, y_label):
         <text class="axis-label" x="{width / 2:.0f}" y="{height - 4}" text-anchor="middle">Dispatch period</text>
         <text class="axis-label" x="16" y="{height / 2:.0f}" transform="rotate(-90 16 {height / 2:.0f})" text-anchor="middle">{html.escape(y_label)}</text>
         {"".join(lines)}
+        <g class="hover-points">{"".join(points_by_series)}</g>
       </svg>
     </section>
     """
@@ -182,9 +193,9 @@ def svg_line_chart(title, series_by_name, colors_by_name, y_label):
 def summary_cards(production, reserves, status):
     cards = []
     for key, (label, color) in PRODUCTION_GROUPS.items():
-        cards.append((label, sum(production[key]), "period-MW", color))
+        cards.append((label, max(production[key], default=0.0), "peak period MW", color))
     for label in ("Primary upward", "Secondary upward", "Tertiary upward"):
-        cards.append((label, sum(reserves[label]), "period-MW", RESERVE_SERIES[label][2]))
+        cards.append((label, max(reserves[label], default=0.0), "peak period MW", RESERVE_SERIES[label][2]))
 
     card_html = [
         f"""
@@ -207,6 +218,50 @@ def summary_cards(production, reserves, status):
         """,
     )
     return "\n".join(card_html)
+
+
+def period_table(production, reserves):
+    periods = max(
+        [len(series) for series in production.values()]
+        + [len(series) for series in reserves.values()],
+        default=0,
+    )
+    columns = [
+        ("Period", None),
+        ("Thermal MW", production["thermal"]),
+        ("Wind MW", production["wind"]),
+        ("PV MW", production["pv"]),
+        ("Primary up MW", reserves["Primary upward"]),
+        ("Primary down MW", reserves["Primary downward"]),
+        ("Secondary up MW", reserves["Secondary upward"]),
+        ("Secondary down MW", reserves["Secondary downward"]),
+        ("Tertiary up MW", reserves["Tertiary upward"]),
+        ("Tertiary down MW", reserves["Tertiary downward"]),
+    ]
+
+    header = "".join(f"<th>{html.escape(label)}</th>" for label, _series in columns)
+    rows = []
+    for period in range(periods):
+        cells = [f"<td>{period + 1}</td>"]
+        for _label, series in columns[1:]:
+            value = series[period] if period < len(series) else 0.0
+            cells.append(f"<td>{value:,.3f}</td>")
+        rows.append(f"<tr>{''.join(cells)}</tr>")
+
+    return f"""
+    <section class="panel">
+      <div class="panel-title">
+        <h2>Per-Period Aggregates</h2>
+        <span>MW by dispatch period</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>{header}</tr></thead>
+          <tbody>{"".join(rows)}</tbody>
+        </table>
+      </div>
+    </section>
+    """
 
 
 def build_dashboard(data, production, reserves):
@@ -339,6 +394,69 @@ def build_dashboard(data, production, reserves):
       stroke: #98a2b3;
       stroke-width: 1;
     }}
+    .table-wrap {{
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }}
+    table {{
+      width: 100%;
+      min-width: 900px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }}
+    th, td {{
+      padding: 9px 10px;
+      border-bottom: 1px solid #e7ebf2;
+      text-align: right;
+      white-space: nowrap;
+    }}
+    th {{
+      background: #f8fafc;
+      color: var(--muted);
+      font-weight: 600;
+    }}
+    th:first-child, td:first-child {{
+      text-align: left;
+      font-weight: 600;
+    }}
+    tbody tr:last-child td {{
+      border-bottom: 0;
+    }}
+    .hover-point {{
+      cursor: crosshair;
+      fill-opacity: 0.04;
+      transition: fill-opacity 120ms ease, r 120ms ease;
+    }}
+    .hover-point:hover {{
+      fill-opacity: 1;
+    }}
+    .chart-tooltip {{
+      position: fixed;
+      z-index: 20;
+      min-width: 174px;
+      max-width: min(280px, calc(100vw - 24px));
+      padding: 9px 11px;
+      background: #172033;
+      color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(23, 32, 51, 0.24);
+      font-size: 13px;
+      line-height: 1.35;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(12px, 12px);
+      transition: opacity 90ms ease;
+    }}
+    .chart-tooltip strong {{
+      display: block;
+      margin-bottom: 3px;
+      font-size: 13px;
+    }}
+    .chart-tooltip span {{
+      display: block;
+      color: #d7dce7;
+    }}
     @media (max-width: 760px) {{
       main {{ width: min(100vw - 20px, 1180px); margin-top: 16px; }}
       header {{ display: block; }}
@@ -361,7 +479,51 @@ def build_dashboard(data, production, reserves):
     </section>
     {svg_line_chart("Aggregated Production", production_series, production_colors, "MW")}
     {svg_line_chart("Active Power Reserves", reserves, reserve_colors, "MW")}
+    {period_table(production, reserves)}
   </main>
+  <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+  <script>
+    const tooltip = document.getElementById("chart-tooltip");
+    const points = document.querySelectorAll(".hover-point");
+
+    function moveTooltip(event) {{
+      const margin = 14;
+      const rect = tooltip.getBoundingClientRect();
+      let left = event.clientX + 14;
+      let top = event.clientY + 14;
+      if (left + rect.width + margin > window.innerWidth) {{
+        left = event.clientX - rect.width - 14;
+      }}
+      if (top + rect.height + margin > window.innerHeight) {{
+        top = event.clientY - rect.height - 14;
+      }}
+      tooltip.style.left = `${{Math.max(margin, left)}}px`;
+      tooltip.style.top = `${{Math.max(margin, top)}}px`;
+    }}
+
+    points.forEach((point) => {{
+      point.addEventListener("mouseenter", (event) => {{
+        tooltip.hidden = false;
+        tooltip.innerHTML = `
+          <strong>${{point.dataset.series}}</strong>
+          <span>Dispatch period: ${{point.dataset.period}}</span>
+          <span>Value: ${{Number(point.dataset.value).toLocaleString(undefined, {{
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3
+          }})}} ${{point.dataset.unit}}</span>
+        `;
+        tooltip.style.opacity = "1";
+        point.setAttribute("r", "8");
+        moveTooltip(event);
+      }});
+      point.addEventListener("mousemove", moveTooltip);
+      point.addEventListener("mouseleave", () => {{
+        tooltip.style.opacity = "0";
+        tooltip.hidden = true;
+        point.setAttribute("r", "6");
+      }});
+    }});
+  </script>
 </body>
 </html>
 """

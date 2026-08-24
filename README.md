@@ -49,6 +49,25 @@ Useful options:
 .\.venv\Scripts\python.exe main.py --solver-log-file runs/experiment_001/solver_log.txt
 ```
 
+## Dashboard
+
+After a solution has been written to `optimization_output.json`, generate the
+HTML dashboard with:
+
+```powershell
+.\.venv\Scripts\python.exe dashboard.py
+```
+
+The dashboard writes `dashboard.html` and shows aggregated thermal production,
+wind park production, PV production, and primary/secondary/tertiary active
+power reserves by dispatch period.
+
+To use a different solution file or dashboard path:
+
+```powershell
+.\.venv\Scripts\python.exe dashboard.py my_result.json -o runs/experiment_001/dashboard.html
+```
+
 Each run writes reproducibility metadata into the output JSON and artifact
 directory, including input hash, git commit, package versions, solver settings,
 model size, objective value, big-M value, validation results, plain text logs,

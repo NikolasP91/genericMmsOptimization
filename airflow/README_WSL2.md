@@ -22,6 +22,17 @@ From PowerShell:
 wsl -d Ubuntu
 ```
 
+If your distro has a versioned name, use that name instead:
+
+```powershell
+wsl -l -v
+wsl -d Ubuntu-24.04
+```
+
+Codex may not be able to see your installed Ubuntu from inside its sandboxed
+Windows account. WSL distros are registered per Windows user, so trust the
+output of `wsl -l -v` from your own PowerShell session.
+
 If Ubuntu is not installed yet:
 
 ```powershell
@@ -30,12 +41,34 @@ wsl --install -d Ubuntu
 
 Restart Windows if WSL asks you to.
 
+To create a dedicated distro for this workflow instead of using the default
+`Ubuntu` name:
+
+```powershell
+wsl --install Ubuntu --name MMSAirflowUbuntu --web-download
+```
+
 ## 2. Install system packages in WSL
 
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-pip python3-venv
 ```
+
+## Fast setup script
+
+After the WSL distro exists and the system packages above are installed, you can
+run the project bootstrap script:
+
+```bash
+cd /mnt/c/Users/nickp/OneDrive/Desktop/MMS/genericMmsOptimization
+bash airflow/setup_wsl_airflow.sh
+```
+
+The script creates `.venv-wsl`, installs the MMS requirements, creates
+`~/airflow/airflow_venv`, installs Airflow, and checks that the DAG is visible.
+
+The manual steps below show the same process in detail.
 
 ## 3. Create the Airflow environment
 
@@ -162,3 +195,29 @@ export AIRFLOW__CORE__DAGS_FOLDER=/mnt/c/Users/nickp/OneDrive/Desktop/MMS/generi
 airflow dags list | grep mms_optimization_dashboard
 airflow dags test mms_optimization_dashboard 2026-01-01
 ```
+
+## DAG not visible in the UI
+
+Airflow must know where the DAG file is. The setup script links the DAG into
+the default Airflow DAG folder:
+
+```bash
+~/airflow/dags/mms_optimization_dashboard.py
+```
+
+If the UI shows no DAGs, run this inside WSL:
+
+```bash
+source ~/airflow/airflow_venv/bin/activate
+export AIRFLOW_HOME=~/airflow
+
+mkdir -p ~/airflow/dags
+ln -sfn /mnt/c/Users/nickp/OneDrive/Desktop/MMS/genericMmsOptimization/airflow/dags/mms_optimization_dashboard.py \
+  ~/airflow/dags/mms_optimization_dashboard.py
+
+airflow dags list
+airflow dags list-import-errors
+```
+
+If `mms_optimization_dashboard` appears in `airflow dags list`, restart
+`airflow standalone` and refresh the browser.

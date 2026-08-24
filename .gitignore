@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 
 .venv/
+.venv-wsl/
 
 # Generated optimization and solver artifacts
 *.mps
